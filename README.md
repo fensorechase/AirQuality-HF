@@ -1,11 +1,20 @@
 # AirQuality-HF
 The Importance of Incorporating Air Quality for Predicting 30-day Hospital Readmission for Patients with Heart Failure
 
+## Python Packages
+- numpy==1.25.2
+- pandas==2.0.0
+- pymongo==4.5.0
+- scikit_learn==1.3.0
+- shap==0.42.1
+- tqdm==4.65.0
+- xgboost==1.7.6
 
 ## Repository Structure
 
 - [AHRQ_unions_intersections.xlsx](./AHRQ_unions_intersections.xlsx): lists feature names within the AHRQ SDOHD dataset at the county and census tract levels. The intersections and unions of county and census tract feature names from 2009-2020 are given.
 - [Air_Quality_ALL_FEAT_NAMES.csv](./Air_Quality_ALL_FEAT_NAMES.csv): lists names and descriptions of air quality features within (i) AHRQ SDOHD databse (ii) EPA AQS database. Note that both sets of features are from the US EPA, but the two databases include different features.
+- [requirements.txt](./requirements.txt): includes packages and corresponding versions required to run Python scripts
 - **data handling:**
   - **COUNTY_AHRQ:**
     - [y_ahrq_COUNTY_clean_data_baselines.Rmd](./data%20handling/COUNTY_AHRQ/y_ahrq_COUNTY_clean_data_baselines.Rmd)
