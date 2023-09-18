@@ -10,6 +10,9 @@ The Importance of Incorporating Air Quality for Predicting 30-day Hospital Readm
 - tqdm==4.65.0
 - xgboost==1.7.6
 
+## R Requirements
+- RStudio Version 2023.06.1+524 (2023.06.1+524)
+
 ## Repository Structure
 
 - [AHRQ_unions_intersections.xlsx](./AHRQ_unions_intersections.xlsx): lists feature names within the AHRQ SDOHD dataset at the county and census tract levels. The intersections and unions of county and census tract feature names from 2009-2020 are given.
@@ -40,3 +43,16 @@ The Importance of Incorporating Air Quality for Predicting 30-day Hospital Readm
   - [evalHelper.py](./scripts%20model%20building/evalHelper.py)
   - [sgs_analyze_baseline.py](./scripts%20model%20building/sgs_analyze_baseline.py)
   - [sgs_evaluate_baselines.py](./scripts%20model%20building/sgs_evaluate_baselines.py)
+
+
+## Running the Code
+1. Download the following public social determinants of health (SDOH) datasets used during preprocessing:
+ - [AHRQ SDOHD]([url](https://www.ahrq.gov/sdoh/data-analytics/sdoh-data.html)) (Years 2009-2020)
+ - [EPA AQS]([url](https://aqs.epa.gov/aqsweb/airdata/download_files.html)) (Years 2009-2020)
+ - [ADI]([url](https://www.neighborhoodatlas.medicine.wisc.edu/)) (Year 2015)
+ - [SVI]([url](https://www.atsdr.cdc.gov/placeandhealth/svi/data_documentation_download.html)) (Year 2014)
+ - [SDI]([url](https://www.graham-center.org/maps-data-tools/social-deprivation-index.html)) (Year 2015)
+3. Data handling (R): With your own patient data including binary 30-day hospital readmission labels, enter the **data handling** directory.
+4. Scripts model building (Python): Given the preprocessed data, run [sgs_evaluate_baselines.py](./scripts%20model%20building/sgs_evaluate_baselines.py) to train models. Results will be saved to user-specified MongoDB collection.
+5. Model results summary (Python): Once models have finished running and results are stored in the MongoDB collection, run [sgs_analyze_baseline.py](./scripts%20model%20building/sgs_analyze_baseline.py)
+
