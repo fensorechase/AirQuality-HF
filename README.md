@@ -4,8 +4,8 @@ The Importance of Incorporating Air Quality for Predicting 30-day Hospital Readm
 
 ## Repository Structure
 
-- [AHRQ_unions_intersections.xlsx](./AHRQ_unions_intersections.xlsx)
-- 
+- [AHRQ_unions_intersections.xlsx](./AHRQ_unions_intersections.xlsx): lists feature names within the AHRQ SDOHD dataset at the county and census tract levels. The intersections and unions of county and census tract feature names from 2009-2020 are given.
+- [Air_Quality_ALL_FEAT_NAMES.csv](./Air_Quality_ALL_FEAT_NAMES.csv): lists names and descriptions of air quality features within (i) AHRQ SDOHD databse (ii) EPA AQS database. Note that both sets of features are from the US EPA, but the two databases include different features.
 - **data handling:**
   - **COUNTY_AHRQ:**
     - [y_ahrq_COUNTY_clean_data_baselines.Rmd](./data%20handling/COUNTY_AHRQ/y_ahrq_COUNTY_clean_data_baselines.Rmd)
