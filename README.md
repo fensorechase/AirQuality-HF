@@ -44,10 +44,11 @@ The Importance of Incorporating Air Quality for Predicting 30-day Hospital Readm
   - [sgs_analyze_baseline.py](./scripts%20model%20building/sgs_analyze_baseline.py)
   - [sgs_evaluate_baselines.py](./scripts%20model%20building/sgs_evaluate_baselines.py)
 
-
+AHRQ SDOHD
 ## Running the Code
 1. Download the following public social determinants of health (SDOH) datasets used during preprocessing:
- - [AHRQ SDOHD]([[url](https://www.ahrq.gov/sdoh/data-analytics/sdoh-data.html)]): (Years 2009-2020)
+ - [https://www.ahrq.gov/sdoh/data-analytics/sdoh-data.html](AHRQ SDOHD
+): (Years 2009-2020)
  - [EPA AQS]([[url](https://aqs.epa.gov/aqsweb/airdata/download_files.html)]): (Years 2009-2020)
  - [ADI]([[url](https://www.neighborhoodatlas.medicine.wisc.edu/)]): (Year 2015)
  - [SVI]([url](https://www.atsdr.cdc.gov/placeandhealth/svi/data_documentation_download.html)): (Year 2014)
