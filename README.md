@@ -4,6 +4,8 @@ The Importance of Incorporating Air Quality for Predicting 30-day Hospital Readm
 
 ## Repository Structure
 
+- [AHRQ_unions_intersections.xlsx](./AHRQ_unions_intersections.xlsx)
+- 
 - **data handling:**
   - **COUNTY_AHRQ:**
     - [y_ahrq_COUNTY_clean_data_baselines.Rmd](./data%20handling/COUNTY_AHRQ/y_ahrq_COUNTY_clean_data_baselines.Rmd)
