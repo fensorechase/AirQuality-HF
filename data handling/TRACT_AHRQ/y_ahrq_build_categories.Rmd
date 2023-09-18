@@ -1,0 +1,68 @@
+---
+title: "ahrq_clean_data_baselines"
+output: html_notebook
+---
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(data.table)
+library(dplyr)
+
+# Set wd when not in RStudio
+setwd('__ PATH HERE __')
+
+```
+
+
+# Input file: ahrq_censustract_feat_categories.csv
+## contains total AHRQ features (for census tract), but needs to be deduplicated.
+
+# Output file: ahrq_tract_categories_dedup.csv
+## contains dedup TOTAL AHRQ features (for census tract) <-> feature category & domain.
+
+both contain years: 2009 - 2020
+
+```{r}
+ahrq_tract_feat_cats <- read.csv("./ahrq_censustract_feat_categories.csv")
+# Drop year col, to prepare for deduplicating 
+ahrq_tract_feat_cats <- subset(ahrq_tract_feat_cats, select = -c(Year)) 
+names(ahrq_tract_feat_cats)
+nrow(ahrq_tract_feat_cats)
+
+# Deduplicate rows, to have "Domain" and "SDOH_Topic" labels for each unique tract feature.
+feats_dict <- ahrq_tract_feat_cats[!duplicated(ahrq_tract_feat_cats$Variable_Name), ]
+nrow(dd_cats_check)
+
+write.csv(feats_dict, file="./ahrq_tract_categories_dedup.csv", row.names=FALSE)
+
+
+```
+
+
+
+
+
+# Extra notes on data labeling inconsistencies in AHRQ : 
+
+```{r}
+
+
+
+# Deduplicate rows, to have "Domain" and "SDOH_Topic" labels for each feature.
+dd_cats <- ahrq_tract_feat_cats[!duplicated(ahrq_tract_feat_cats), ]
+nrow(dd_cats)
+
+dd_cats_check <- ahrq_tract_feat_cats[!duplicated(ahrq_tract_feat_cats$Variable_Name), ]
+nrow(dd_cats_check)
+
+dd_cats[duplicated(dd_cats$Variable_Name), ]
+
+
+# Example: why we filter ONLY on variable name, not Domain, SDOH_Topic, and Variable_Name.
+selected_rows <- filter(dd_cats, Variable_Name == "HRSA_MUA_CENSUS_TRACT")
+selected_rows
+
+
+```
+

@@ -1,0 +1,346 @@
+{
+    "demo_charlson":
+    [
+        "demo",
+        "charlson"
+    ],
+    "sodohku_all":
+    [
+        "twitter",
+        "osm",
+        "fsq"
+    ],
+    "sodohku_sdi":
+    [
+        "sodohku",
+        "sdi"
+    ],
+    "sodohku_adi":
+    [
+        "sodohku",
+        "adi_national"
+    ],
+    "sodohku_adi_sdi":
+    [
+        "sodohku",
+        "adi_national",
+        "sdi"
+    ],
+    "demo_charlson_sdi":
+    [
+        "demo",
+        "charlson",
+        "sdi"
+    ],
+    "demo_charlson_adi":
+    [
+        "demo",
+        "charlson",
+        "adi_national"
+    ],
+    "demo_charlson_sodohku":
+    [
+        "demo",
+        "charlson",
+        "sodohku"
+    ],
+    "demo_charlson_sodohku_all":
+    [
+        "demo",
+        "charlson",
+        "twitter",
+        "osm",
+        "fsq"
+    ],
+    "demo_comorb":
+    [
+        "demo",
+        "comorb"
+    ],
+    "dcov":
+    [
+        "demo",
+        "comorb",
+        "vitals"
+    ],
+    "medianIMP_county_ahrq_all":
+    [
+        "medianIMP_ahrq_1_socialcontext",
+        "medianIMP_ahrq_2_economiccontext",
+        "medianIMP_ahrq_3_education",
+        "medianIMP_ahrq_4_physicalinfrastructure",
+        "medianIMP_ahrq_5_healthcarecontext"
+    ],
+
+
+    "meanIMP_ahrq_all":
+    [
+        "meanIMP_ahrq_1_socialcontext",
+        "meanIMP_ahrq_2_economiccontext",
+        "meanIMP_ahrq_3_education",
+        "meanIMP_ahrq_4_physicalinfrastructure",
+        "meanIMP_ahrq_5_healthcarecontext"
+    ],
+
+    "spatialIMP_county_ahrq_all":
+    [
+        "spatialIMP_ahrq_1_socialcontext",
+        "spatialIMP_ahrq_2_economiccontext",
+        "spatialIMP_ahrq_3_education",
+        "spatialIMP_ahrq_4_physicalinfrastructure",
+        "spatialIMP_ahrq_5_healthcarecontext"
+    ],
+
+    "sodohku_ahrq":
+    [
+        "twitter",
+        "osm",
+        "fsq",
+        "ahrq_1_socialcontext",
+        "ahrq_2_economiccontext",
+        "ahrq_3_education",
+        "ahrq_4_physicalinfrastructure",
+        "ahrq_5_healthcarecontext"
+        
+    ],
+
+    "hf_with_comorb":
+    [
+        "hf_vars",
+        "comorb"
+    ],
+    "hf_with_charlson":
+    [
+        "hf_vars",
+        "charlson"
+    ],
+    
+
+    "demo_comorb_ahrq_all":
+    [
+        "demo",
+        "comorb",
+        "ahrq_1_socialcontext",
+        "ahrq_2_economiccontext",
+        "ahrq_3_education",
+        "ahrq_4_physicalinfrastructure",
+        "ahrq_5_healthcarecontext"
+
+    ],
+    
+    "demo_ahrq":
+    [
+        "demo",
+        "ahrq_1_socialcontext",
+        "ahrq_2_economiccontext",
+        "ahrq_3_education",
+        "ahrq_4_physicalinfrastructure",
+        "ahrq_5_healthcarecontext"
+
+    ],
+    "comorb_ahrq":
+    [
+        "comorb",
+        "ahrq_1_socialcontext",
+        "ahrq_2_economiccontext",
+        "ahrq_3_education",
+        "ahrq_4_physicalinfrastructure",
+        "ahrq_5_healthcarecontext"
+    ],
+
+    
+    "tot_county_AHRQ_median":
+    [
+        "county_medianIMP_ahrq_1_socialcontext",
+        "county_medianIMP_ahrq_2_economiccontext",
+        "county_medianIMP_ahrq_3_education",
+        "county_medianIMP_ahrq_4_physicalinfrastructure",
+        "county_medianIMP_ahrq_5_healthcarecontext"
+    ],
+    "tot_county_AHRQ_mean":
+    [
+        "county_meanIMP_ahrq_1_socialcontext",
+        "county_meanIMP_ahrq_2_economiccontext",
+        "county_meanIMP_ahrq_3_education",
+        "county_meanIMP_ahrq_4_physicalinfrastructure",
+        "county_meanIMP_ahrq_5_healthcarecontext"
+    ],
+    "tot_tract_AHRQ_median":
+    [
+        "tract_medianIMP_ahrq_2_economiccontext",
+        "tract_medianIMP_ahrq_3_education",
+        "tract_medianIMP_ahrq_4_physicalinfrastructure",
+        "tract_medianIMP_ahrq_5_healthcarecontext"
+    ],
+    "tot_tract_AHRQ_mean":
+    [
+        "tract_meanIMP_ahrq_1_socialcontext",
+        "tract_meanIMP_ahrq_2_economiccontext",
+        "tract_meanIMP_ahrq_3_education",
+        "tract_meanIMP_ahrq_4_physicalinfrastructure",
+        "tract_meanIMP_ahrq_5_healthcarecontext"
+    ],
+
+
+
+    "tot_county_AHRQ_median_w_EPAA_w_EPA_AQS_median":
+    [
+        "county_medianIMP_ahrq_1_socialcontext",
+        "county_medianIMP_ahrq_2_economiccontext",
+        "county_medianIMP_ahrq_3_education",
+        "county_medianIMP_ahrq_4_physicalinfrastructure",
+        "county_medianIMP_ahrq_5_healthcarecontext",
+        
+        "EPA_AQS_median"  
+    ],
+
+    "tot_county_AHRQ_median_w_EPAA_w_EPA_AQS_spatial":
+    [
+        "county_medianIMP_ahrq_1_socialcontext",
+        "county_medianIMP_ahrq_2_economiccontext",
+        "county_medianIMP_ahrq_3_education",
+        "county_medianIMP_ahrq_4_physicalinfrastructure",
+        "county_medianIMP_ahrq_5_healthcarecontext",
+
+        "EPA_AQS_spatial"
+    ],
+    
+    "tot_county_AHRQ_median_w_EPAA_spatial_w_EPA_AQS_spatial":
+    [
+        "county_medianIMP_ahrq_1_socialcontext",
+        "county_medianIMP_ahrq_2_economiccontext",
+        "county_medianIMP_ahrq_3_education",
+        "county_AHRQ_medianIMP_ahrq_4_NO_EPAA",
+
+        "AHRQ_EPAA_spatial",
+        "EPA_AQS_spatial"
+    ],
+
+    "tot_county_AHRQ_median_without_EPAA_w_EPA_AQS_median":
+    [
+        "county_medianIMP_ahrq_2_economiccontext",
+        "county_medianIMP_ahrq_3_education",
+        "county_AHRQ_medianIMP_ahrq_4_NO_EPAA",
+        "county_medianIMP_ahrq_5_healthcarecontext",
+
+        "EPA_AQS_median"
+    ],
+
+    "tot_county_AHRQ_median_without_EPAA_w_EPA_AQS_spatial":
+    [
+        "county_medianIMP_ahrq_2_economiccontext",
+        "county_medianIMP_ahrq_3_education",
+        "county_AHRQ_medianIMP_ahrq_4_NO_EPAA",
+        "county_medianIMP_ahrq_5_healthcarecontext",
+        
+        "EPA_AQS_spatial"
+    ],
+
+
+
+    "intersect_county_AHRQ_median_w_EPAA_spatial":
+    [
+        "AHRQ_EPAA_spatial",
+        "intersect_county_AHRQ_median"
+
+    ],
+    "intersect_tract_AHRQ_median_w_EPAA_spatial":
+    [
+        "AHRQ_EPAA_spatial",
+        "intersect_tract_AHRQ_median"
+
+    ],
+
+    "intersect_county_AHRQ_median_w_EPA_AQS_spatial":
+    [
+        "EPA_AQS_spatial",
+        "intersect_county_AHRQ_median"
+
+    ],
+    "intersect_tract_AHRQ_median_w_EPA_AQS_spatial":
+    [
+        "EPA_AQS_spatial",
+        "intersect_tract_AHRQ_median"
+    ], 
+
+
+
+
+    "county_AHRQ_median_without_EPAA": 
+    [
+        "county_medianIMP_ahrq_1_socialcontext",
+        "county_medianIMP_ahrq_2_economiccontext",
+        "county_medianIMP_ahrq_3_education",
+        "county_AHRQ_medianIMP_ahrq_4_NO_EPAA",
+        "county_medianIMP_ahrq_5_healthcarecontext"
+
+    ],
+    "county_AHRQ_mean_without_EPAA":
+    [
+        "county_meanIMP_ahrq_1_socialcontext",
+        "county_meanIMP_ahrq_2_economiccontext",
+        "county_meanIMP_ahrq_3_education",
+        "county_AHRQ_meanIMP_ahrq_4_NO_EPAA",
+        "county_meanIMP_ahrq_5_healthcarecontext"
+
+    ],
+
+    "hf_with_charlson_AND_tot_county_AHRQ_median":
+    [
+        "hf_vars",
+        "charlson",
+        
+        "county_medianIMP_ahrq_1_socialcontext",
+        "county_medianIMP_ahrq_2_economiccontext",
+        "county_medianIMP_ahrq_3_education",
+        "county_medianIMP_ahrq_4_physicalinfrastructure",
+        "county_medianIMP_ahrq_5_healthcarecontext"
+    ],
+
+    "hf_with_charlson_AND_tot_county_AHRQ_median_without_EPAA_or_EPA_AQS":
+    [
+        "hf_vars",
+        "charlson",
+        
+        "county_medianIMP_ahrq_1_socialcontext",
+        "county_medianIMP_ahrq_2_economiccontext",
+        "county_medianIMP_ahrq_3_education",
+        "county_AHRQ_medianIMP_ahrq_4_NO_EPAA",
+        "county_medianIMP_ahrq_5_healthcarecontext"
+
+    ],
+
+    "hf_with_charlson_AND_tot_county_AHRQ_median_w_EPAA_w_EPA_AQS_median":
+    [
+        "hf_vars",
+        "charlson",
+        
+        "county_medianIMP_ahrq_1_socialcontext",
+        "county_medianIMP_ahrq_2_economiccontext",
+        "county_medianIMP_ahrq_3_education",
+        "county_medianIMP_ahrq_4_physicalinfrastructure",
+        "county_medianIMP_ahrq_5_healthcarecontext",
+        
+        "EPA_AQS_median"  
+    ],
+
+    "hf_with_charlson_AND_tot_county_AHRQ_median_without_EPAA_w_EPA_AQS_median":
+    [
+        "hf_vars",
+        "charlson",
+
+        "county_medianIMP_ahrq_2_economiccontext",
+        "county_medianIMP_ahrq_3_education",
+        "county_AHRQ_medianIMP_ahrq_4_NO_EPAA",
+        "county_medianIMP_ahrq_5_healthcarecontext",
+
+        "EPA_AQS_median"
+
+    ]
+
+
+
+
+
+
+}

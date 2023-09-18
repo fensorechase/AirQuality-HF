@@ -1,0 +1,345 @@
+---
+title: "ahrq_clean_data_baselines"
+output: html_notebook
+---
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+
+## Data prep:
+orig_df: de-id patient data
+AHRQ census tract data 2009-2020
+```{r}
+library(caret)
+library(data.table)
+library(dplyr)
+library(sets)
+library(scales)
+library(tidyr)
+library(stringr)
+
+# Set wd when not in RStudio
+setwd('__ PATH HERE __')
+
+source('data_cleaners.R')
+
+# Import patient dataset
+orig_df <- read.csv("./__PATIENT DATA CSV HERE __")
+
+# Import AHRQ data
+ahrq_df_2009 <- read.csv("./TRACT_AHRQ/sdoh_2009_tract_1_0.csv")
+ahrq_df_2010 <- read.csv("./TRACT_AHRQ/sdoh_2010_tract_1_0.csv") # header=FALSE
+ahrq_df_2011 <- read.csv("./TRACT_AHRQ/sdoh_2011_tract_1_0.csv")
+ahrq_df_2012 <- read.csv("./TRACT_AHRQ/sdoh_2012_tract_1_0.csv")
+ahrq_df_2013 <- read.csv("./TRACT_AHRQ/sdoh_2013_tract_1_0.csv")
+ahrq_df_2014 <- read.csv("./TRACT_AHRQ/sdoh_2014_tract_1_0.csv")
+ahrq_df_2015 <- read.csv("./TRACT_AHRQ/sdoh_2015_tract_1_0.csv")
+ahrq_df_2016 <- read.csv("./TRACT_AHRQ/sdoh_2016_tract_1_0.csv")
+ahrq_df_2017 <- read.csv("./TRACT_AHRQ/sdoh_2017_tract_1_0.csv")
+ahrq_df_2018 <- read.csv("./TRACT_AHRQ/sdoh_2018_tract_1_0.csv")
+ahrq_df_2019 <- read.csv("./TRACT_AHRQ/sdoh_2019_tract_1_0.csv")
+ahrq_df_2020 <- read.csv("./TRACT_AHRQ/sdoh_2020_tract_1_0.csv")
+
+
+# Use fill to ensured consistent number of columns, merge dfs from 2009-2020 (via mean).
+# Merge dfs on the 6 items below in list.
+ahrq_total <- rbindlist(list(ahrq_df_2009, ahrq_df_2010, ahrq_df_2011, ahrq_df_2012, ahrq_df_2013,
+                             ahrq_df_2014, ahrq_df_2015, ahrq_df_2016, ahrq_df_2017, ahrq_df_2018,
+                             ahrq_df_2019, ahrq_df_2020), fill=TRUE)
+
+
+# Import SVI Data: 
+# SVI data download link & variable descriptions: https://www.atsdr.cdc.gov/placeandhealth/svi/data_documentation_download.html
+setwd('__ PATH HERE __')
+
+SVI_2014_US <- read.csv("./TRACT_AHRQ/SVI_2014_US.csv")
+# Year: 2010. Geo level: census tract. All states in US included. 
+# SVI_2010_US <- read.csv("SVI_2010_US.csv")
+
+
+
+```
+
+# Decide which AHRQ features to keep 
+1. Keep all, divide into the 5 categories
+
+```{r}
+# Update ahrq_keep_cols with columns we want for features
+# If census tract data: "TRACTFIPS": for census tract matching
+# mean calculation is carried out via "TRACTFIPS" as well.
+
+# Keep "COUNTYFIPS" for AQI merge.
+# Keep "YEAR" for baselineyear merge.
+ahrq_remove_cols <- c(
+                 "STATEFIPS", "STATE", "COUNTY", "REGION", "TERRITORY", "CEN_AREALAND_SQM_TRACT", "CEN_POPDENSITY_TRACT", "ERS_RUCA1_2000", "ERS_RUCA2_2000", "ERS_RUCA1_2010", "ERS_RUCA2_2010", "CEN_AIAN_NH_IND")
+
+ahrq_keep_cols <- names(ahrq_total)[! names(ahrq_total) %in% ahrq_remove_cols]
+
+# Keep only 'ahrq_keep_cols'
+ahrq_kept_feats = ahrq_total[, ..ahrq_keep_cols] # !(names(ahrq_total) %in% ahrq_remove_cols)]
+head(ahrq_kept_feats)
+
+```
+
+# AHRQ imputation: fill NAs with median of feature wrt all census blocks in USA
+# median
+
+```{r}
+impute_ahrq = names(subset(ahrq_kept_feats, select = -c(TRACTFIPS, COUNTYFIPS, YEAR)))
+length(impute_ahrq) # Num features to impute on: 517 (ahrq, sdoh, and EPA air quality)
+#impute_ahrq
+
+
+median_ahrq_kept_feats <- ahrq_kept_feats
+
+#sum <- 0
+for (k in impute_ahrq) {
+  
+  median_ahrq_kept_feats[[k]][is.na(median_ahrq_kept_feats[[k]])] <- median(median_ahrq_kept_feats[[k]], na.rm = T)
+  median_ahrq_kept_feats[[k]] <- rescale(median_ahrq_kept_feats[[k]]) # Rescale 0-1 with scale package
+  
+}
+
+
+
+# Rename cols: tract_medianIMP prefix
+med_names <- setdiff(colnames(median_ahrq_kept_feats), impute_ahrq)
+median_ahrq_kept_feats <- median_ahrq_kept_feats %>% rename_at(vars(-one_of(med_names)), ~ paste0('tract_medianIMP_', .))
+
+
+
+# Imp result: median_ahrq_kept_feats
+
+```
+
+# AHRQ imputation: fill NAs with mean of feature wrt all census blocks in USA
+# mean
+
+```{r}
+
+impute_ahrq = names(subset(ahrq_kept_feats, select = -c(TRACTFIPS, COUNTYFIPS, YEAR)))
+length(impute_ahrq) # Num features to impute on: 517 (ahrq, sdoh, and EPA air quality)
+#impute_ahrq
+
+mean_ahrq_kept_feats <- ahrq_kept_feats
+
+
+#sum <- 0
+for (k in impute_ahrq) {
+  
+  mean_ahrq_kept_feats[[k]][is.na(mean_ahrq_kept_feats[[k]])] <- median(mean_ahrq_kept_feats[[k]], na.rm = T)
+  mean_ahrq_kept_feats[[k]] <- rescale(mean_ahrq_kept_feats[[k]]) # Rescale 0-1 with scale package
+  
+}
+
+
+
+# Rename cols: tract_medianIMP prefix
+mean_names <- setdiff(colnames(mean_ahrq_kept_feats), impute_ahrq)
+mean_ahrq_kept_feats <- mean_ahrq_kept_feats %>% rename_at(vars(-one_of(mean_names)), ~ paste0('tract_meanIMP_', .))
+
+# Imp result: mean_ahrq_kept_feats
+```
+
+# 1. AHRQ feature selection via 'baselineyear' year matching:
+
+```{r}
+head(median_ahrq_kept_feats)
+```
+
+# SVI Data: Separately prepare: 
+```{r}
+# Select desired variables from 'SVI_2014_US'
+# SVI 2014 year variables meaning documented here: https://www.atsdr.cdc.gov/placeandhealth/svi/documentation/SVI_documentation_2010.html
+
+# FIPS: census tract fips
+# We don't keep the MOE columns (margin of error)
+
+
+
+# E_: estimate using 2010-2014ACS data
+svi_rawvars_keep_cols <- c("FIPS", "E_HU", "E_HH", "E_POV", "E_UNEMP", "E_PCI", 
+                   "E_NOHSDP", "E_AGE65", "E_AGE17", "E_DISABL", "E_SNGPNT", 
+                   "E_MINRTY", "E_LIMENG", "E_MUNIT", "E_MOBILE", "E_CROWD", 
+                   "E_NOVEH", "E_GROUPQ")
+
+# EP_: percentage
+svi_percents_keep_cols <- c("EP_POV", "EP_UNEMP", "EP_PCI", "EP_NOHSDP", 
+                            "EP_AGE65", "EP_AGE17", "EP_DISABL", "EP_SNGPNT", 
+                            "EP_MINRTY", "EP_LIMENG", "EP_MUNIT", "EP_MOBILE", 
+                            "EP_CROWD", "EP_NOVEH", "EP_GROUPQ")
+
+svi_percentiles_keep_cols <- c( "EPL_POV", "EPL_UNEMP", "EPL_PCI", "EPL_NOHSDP",
+        "EPL_AGE65", "EPL_AGE17", "EPL_DISABL", "EPL_SNGPNT",
+        "EPL_MINRTY", "EPL_LIMENG", "EPL_MUNIT", "EPL_MOBILE",
+        "EPL_CROWD", "EPL_NOVEH", "EPL_GROUPQ")
+
+svi_RPL_raw_themes <- c("RPL_THEME1", "RPL_THEME2", "RPL_THEME3", "RPL_THEME4")
+
+svi_composites_cols <- c("SPL_THEMES", "svi_RPL_raw_themes", "RPL_THEMES", "F_TOTAL")
+# SVI_2014_US$SPL_THEMES # Sum of series 1 through 4 themes	
+# SVI_2014_US$RPL_THEMES # Overall percentile ranking for themes 1 through 4
+# SVI_2014_US$F_TOTAL # Sum of flags for the four themes	
+
+
+svi_total_keep <- c(svi_rawvars_keep_cols, svi_percents_keep_cols, svi_percentiles_keep_cols, 
+                    svi_RPL_raw_themes, svi_composites_cols)
+
+SVI_2014_vars = SVI_2014_US[,(names(SVI_2014_US) %in% svi_total_keep)]
+
+# Impute missing values with *median for that feature*: 
+# NOTE: in SVI df, the CDC says: Values of -999 represent “null” or “no data.”
+sum(SVI_2014_vars == "-999") # 2300 (of all counties. not yet matched to patients.)
+sum(is.null(SVI_2014_vars))  # 0
+sum(SVI_2014_vars == "no data") # 0
+
+# So, for values == "-999" impute with median of column
+# We see the following columns in SVI have 1 or more missing values (i.e. -999)
+# [1] "E_PCI"
+# [1] "EP_PCI"
+# [1] "SPL_THEMES"
+# [1] "RPL_THEMES"
+# [1] "F_TOTAL"
+imputed_SVI_2014_vars <- SVI_2014_vars
+for(i in names(SVI_2014_vars)){
+  imputed_SVI_2014_vars[[i]] <- sapply(SVI_2014_vars[,i],function(x) ifelse(x=="-999", median(SVI_2014_vars[,i], na.rm = TRUE), x))
+}
+
+SVI_2014_vars <- imputed_SVI_2014_vars # Un-alias. 
+sum(SVI_2014_vars == "-999") # Now, no instances of -999.
+```
+
+
+# Separately prepare patient data:
+
+```{r}
+# Coerce NAs for patients without censustractcountynum OR census tract. 
+# To allow head-to-head tract vs. county granularity comparison.
+orig_df <- orig_df %>%
+  mutate(censustract = as.numeric(censustract), na.rm=FALSE)
+
+orig_df <- orig_df %>%
+  mutate(countynum = as.numeric(countynum), na.rm=FALSE)
+
+# Coerce NA for statenum. 
+orig_df <- orig_df %>%
+  mutate(statenum = as.numeric(statenum), na.rm=FALSE)
+
+# First, remove rows in orig_df with an NA for any of the above: censustract, countynum, OR statenum
+orig_df <- orig_df %>% drop_na(censustract)
+orig_df <- orig_df %>% drop_na(countynum)
+orig_df <- orig_df %>% drop_na(statenum)
+
+# How many patients before removing GA?
+nrow(orig_df) # 26030
+# Only keep patients in GA (state = 13)
+orig_df <- orig_df[orig_df$statenum == 13, ]
+nrow(orig_df) # 33622: num ONLY in GA
+
+table(orig_df$fips)  # County fips.
+
+
+
+
+
+# do some cleaning
+# keep:
+# Patient_Home_Zip_Code
+# Patient_Home_County
+# "censustract"
+# "baselineyear"
+
+# Keep "countynum" (i.e. countyfips ) & "statenum"
+remove_cols <- c("__ INSERT LIST OF PATIENT VARS TO REMOVE __")
+
+orig_df = orig_df[,!(names(orig_df) %in% remove_cols)]
+
+endpoints <- c("readmit30bin", "death30bin", "composite30")
+
+# clean up the end-point related stuff
+for (colx in endpoints) {
+	orig_df <- remove_na(orig_df, colx)
+}
+
+
+# remove adi data
+orig_df <- remove_na(orig_df, "ADI_national_rank")
+orig_df <- create_folds(orig_df, endpoints)
+write.csv(orig_df, file="./clean_tract.csv", row.names=FALSE) # clean_tract
+
+
+## Age upper limit: remove patients with age_current > 100. 
+# Before this, nrow = 44,142. After this, nrow = 44015. So 127 patients had age_current > 100.
+orig_df <- orig_df[orig_df$age_current <= 100, ]
+
+## fix it to be adults aged >= 18
+orig_df <- orig_df[(orig_df$age_current >= 18), ]
+orig_df <- create_folds(orig_df, endpoints)
+write.csv(orig_df, file="./clean_tract_v1.csv", row.names=FALSE)
+
+
+for (colx in c("Systolic_BP", "Heart_Rate", "Resp",
+			   "loceuhfloor", "loceuhicu",
+			   "loceclhfloor", "loceclhicu",
+			   "specialcvd", "specialint",
+			   "specialeme", "specialoth")) {
+	orig_df <- remove_na(orig_df, colx)
+}
+
+
+orig_df <- remove_na(orig_df, "healthnT")
+
+# CONSTRUCT "COUNTY_FIPS" column
+# For later merging w county file.
+# Convert County.Code to <chr> type from <dbl> 
+orig_df <- transform(orig_df,
+                             countynum = as.character(countynum))
+# Convert County.Code to <chr> type from <int> 
+orig_df <- transform(orig_df,
+                             statenum = as.character(statenum))
+
+# Pad county
+orig_df[ ,'countynum'] <- str_pad(orig_df[,'countynum'], 3, pad = "0")
+# Remove leading zero from state
+
+
+# Now create the COUNTY_FIPS column via string concat
+orig_df$COUNTY_FIPS <- str_c(orig_df$'statenum', '', orig_df$'countynum')
+```
+
+
+
+# Finally, combine 2 diff imp versions -- using cbind() columns. 
+median_ahrq_kept_feats
+mean_ahrq_kept_feats
+```{r}
+
+nrow(median_ahrq_kept_feats)
+nrow(mean_ahrq_kept_feats)
+
+
+# PERFORM MERGE: median & mean imps.
+all_imps_ahrq <- merge(median_ahrq_kept_feats, mean_ahrq_kept_feats, by.x=c("TRACTFIPS", "YEAR"), by.y=c("TRACTFIPS", "YEAR"))
+sum(is.na(all_imps_ahrq))
+
+```
+
+# Merge final AHRQ <-> patient final data:
+# Also, merge SVI data (SVI_2014_vars)
+
+```{r}
+# - we have mean for each ahrq feature now <-> tractfips.
+# colnames(orig_df)[colnames(orig_df) == 'censustract'] <- 'TRACTFIPS'
+# Merge the dataframes based on matching values in 'TRACTFIPS' and 'YEAR' -- for baselineyear matching.
+
+# Cast types to match:
+
+# OPTION 1: Use census tract AHRQ data.
+ahrq_baseline <- merge(all_imps_ahrq, orig_df, by.x=c("TRACTFIPS", "YEAR"), by.y=c("censustract", "baselineyear"))
+
+ahrq_baseline <- merge(ahrq_baseline, SVI_2014_vars, by.x = "TRACTFIPS", by.y = "FIPS")
+
+####################################################
+```
+
+

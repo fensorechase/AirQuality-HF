@@ -1,0 +1,1036 @@
+---
+title: "generate_plots_model_results"
+output: html_document
+date: "2023-08-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(tidyr)
+#library(tidyverse)
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(data.table)
+
+library(ggsci) # For publishing group-specific color scemes
+# Link for ggsci tutorial: https://cran.r-project.org/web/packages/ggsci/vignettes/ggsci.html#Continuous_color_palettes
+# another ggsci link: https://cran.r-project.org/web/packages/ggsci/vignettes/ggsci.html
+
+
+# Set wd when not in RStudio
+setwd('__PATH HERE__')
+
+
+# Includes AHRQ data. 
+
+df_2_baseline_sg_results <- read.csv("../scripts/__ model results CSV file __")
+
+
+```
+
+
+# Baseline general model: To check which model performs with the highest AUC on average overall...
+(out of RF, xgboost, MLP, logistic)
+```{r}
+# Across all feats & subgroups.
+avg_auc <- df_2_baseline_sg_results %>% group_by(model) %>% summarise(mean_auc = mean(auc)) %>% arrange(model, desc(mean_auc))
+avg_auc <- avg_auc %>% arrange(desc(mean_auc))
+avg_auc
+# 1st row here is model with HIGHEST mean AUC (among subgroups, feats, and folds.)
+
+
+med_auc <- df_2_baseline_sg_results %>% group_by(model) %>% summarise(median_auc = median(auc)) %>% arrange(model, desc(median_auc))
+med_auc <- med_auc %>% arrange(desc(median_auc))
+med_auc
+# 1st row here is model with HIGHEST median AUC (among subgroups, feats, and folds.)
+
+# Take mean of auc_sd (auc sd is stdev of auc across 10 folds)
+
+# Take mean of auc_variance. Then take sqrt of final auc_variance. 
+# Why: we can take mean of variances, but not stdevs.
+stdev_auc <- df_2_baseline_sg_results %>% group_by(model) %>% summarise(std_auc = sqrt(mean(auc_sd^2))) %>% arrange(model, desc(std_auc))
+stdev_auc <- stdev_auc %>% arrange(std_auc) # Ascending standard deviation.
+stdev_auc
+# 1st row here is model with LOWEST stdev of aucs (among subgroups, feats, and folds.)
+
+
+# Here, adjust 'df_2_baseline_sg_results' to ONLY contain results from "best performing" model according to max avg AUC.
+df_2_baseline_sg_results <- df_2_baseline_sg_results[df_2_baseline_sg_results$model == "logr", ]
+```
+
+
+
+--- Evaluate ONLY Logistic Regression models from here below. (Since logistic got max mean & median AUC).
+
+
+# To answer question: "DOES EQUITY IN AUC DIFFER BETWEEN FEATURE GROUPS?"
+```{r}
+# Stratify by feat, then by subgroup.
+by_feat_groups <- df_2_baseline_sg_results %>% group_by(feat, subgroup) %>% summarise(max_auc = max(auc)) %>% arrange(feat, desc(max_auc))
+
+
+
+# Make subgroup plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=feat, y=max_auc, group=feat, color=subgroup, group=INDEX, color=INDEX)) +
+geom_line() +
+  geom_point( position = position_dodge2(
+  width = 1,
+  preserve = "total",
+  padding = 0.1,
+  reverse = FALSE
+
+))+
+    facet_grid(cols = vars(feat), scales = "free_x", space = "free_x") +
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1), panel.spacing.x = unit(0.001, "cm"),
+        strip.text.x = element_blank()) +
+scale_color_d3("category20")
+
+plt_by_feats # Show plot
+
+
+
+```
+
+
+# (subset of subgroups) Vertical dot plots
+- only on these subgroups:  black, white, male, female, other
+
+```{r}
+# First filter for these subgroups only
+sgs_selected <- c("black", "white") # c("black", "white", "male", "female", "other")
+subset_sgs <- filter(df_2_baseline_sg_results, subgroup %in%  sgs_selected)
+# Stratify by feat, then by subgroup.
+by_feat_groups <- subset_sgs %>% group_by(feat, subgroup) %>% summarise(mean_auc = auc) %>% arrange(feat, desc(mean_auc))
+
+
+feat_order <- c( "age_current",
+        "sex",
+        "demo",
+        "hf_vars",
+        "comorb",
+        "hf_with_comorb",
+        "demo_comorb",
+        "charlson",
+        "hf_with_charlson",
+
+        "adi_national", "adi_state", 
+        "sdi", "sdi_score", 
+        "svi",
+        
+        "tot_county_AHRQ_median",
+        "tot_county_AHRQ_mean",
+        "tot_tract_AHRQ_median",
+        "tot_tract_AHRQ_mean",
+        
+        
+        "intersect_county_AHRQ_median",
+        "intersect_tract_AHRQ_median"
+        
+        )
+
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% feat_order, ]
+
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=feat_order)
+
+  
+
+# Make plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=feat, y=mean_auc, group=feat, color=subgroup, group=INDEX, color=INDEX)) +
+geom_line() +
+  geom_point( position = position_dodge2(
+  width = 1,
+  preserve = "total",
+  padding = 0.1,
+  reverse = FALSE
+
+))+
+    facet_grid(cols = vars(feat), scales = "free_x", space = "free_x") +
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1), panel.spacing.x = unit(0.001, "cm"),
+        strip.text.x = element_blank()) +
+scale_color_d3("category20") 
+# + ggtitle("Agnostic Model: Logistic Regression - AHRQ County vs. Tract")
+
+plt_by_feats # Show plot
+
+
+```
+
+
+# Experiment 2: Only intersection results
+```{r}
+# First filter for these subgroups only
+sgs_selected <- c("black", "white") # c("black", "white", "male", "female", "other")
+subset_sgs <- filter(df_2_baseline_sg_results, subgroup %in%  sgs_selected)
+# Stratify by feat, then by subgroup.
+by_feat_groups <- subset_sgs %>% group_by(feat, subgroup) %>% summarise(mean_auc = auc) %>% arrange(feat, desc(mean_auc))
+
+
+feat_order <- c( "age_current",
+        "sex",
+        "demo",
+        "hf_vars",
+        "comorb",
+        "hf_with_comorb",
+        "demo_comorb",
+        "charlson",
+        "hf_with_charlson",
+
+        "adi_national", "adi_state", 
+        "sdi", "sdi_score", 
+        "svi",
+        
+        "intersect_county_AHRQ_median",
+        "intersect_tract_AHRQ_median"
+        
+        )
+
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% feat_order, ]
+
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=feat_order)
+
+  
+
+# Make plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=feat, y=mean_auc, group=feat, color=subgroup, group=INDEX, color=INDEX)) +
+geom_line() +
+  geom_point( position = position_dodge2(
+  width = 1,
+  preserve = "total",
+  padding = 0.1,
+  reverse = FALSE
+
+))+
+    facet_grid(cols = vars(feat), scales = "free_x", space = "free_x") +
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1), panel.spacing.x = unit(0.001, "cm"),
+        strip.text.x = element_blank()) +
+scale_color_d3("category20") 
+# + ggtitle("Agnostic Model: RF - Intersection Features of County vs. Tract")
+
+plt_by_feats # Show plot
+```
+
+# Experiment 3 (just air quality imputation methods): Air quality ALONE
+
+```{r}
+# First filter for these subgroups only
+sgs_selected <- c("black", "white") # c("black", "white", "male", "female", "other")
+subset_sgs <- filter(df_2_baseline_sg_results, subgroup %in%  sgs_selected)
+# Stratify by feat, then by subgroup.
+by_feat_groups <- subset_sgs %>% group_by(feat, subgroup) %>% summarise(mean_auc = auc) %>% arrange(feat, desc(mean_auc))
+
+
+# Removed: "EPA_AQS_mean", "AHRQ_EPAA_mean",
+feat_order <- c( "age_current",
+        "sex",
+        "demo",
+        "hf_vars",
+        "comorb",
+        "hf_with_comorb",
+        "demo_comorb",
+        "charlson",
+        "hf_with_charlson",
+
+        "adi_national", "adi_state",
+        "svi",
+        "sdi", 
+      
+                "tot_county_AHRQ_median",
+        
+        "EPA_AQS_median",
+        "EPA_AQS_spatial",
+
+        "AHRQ_EPAA_median",
+        "AHRQ_EPAA_spatial"
+        
+        )
+
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% feat_order, ]
+
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=feat_order)
+
+  
+
+# RENAME: 
+RENAME_cols <- c("Age",
+                 "Sex",
+                 "Demo",
+                 "HF Type",
+                 "Comorb",
+                 "HF Type+Comorb",
+                 "Demo+Comorb",
+                 "CCI",
+                 "HF Type+CCI",
+                 "ADI: National Rank",
+                 "ADI: State Rank",
+                 "SVI",
+                 "SDI",
+                 
+                 "Total AHRQ: County",
+                 "EPA AQS: Median",
+                 "EPA AQS: Spatial",
+                 "AHRQ EPA: Median",
+                 "AHRQ EPA: Spatial"
+                  )
+
+
+
+rename_map <- setNames(RENAME_cols, feat_order)
+by_feat_groups <- by_feat_groups %>% mutate(feat = rename_map[as.character(feat)])
+
+by_feat_groups
+
+# Reorder again
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% RENAME_cols, ]
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=rev(RENAME_cols))
+
+
+# Make plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=mean_auc, y=feat, group=feat, color=subgroup, group=INDEX, color=INDEX)) +
+geom_line() +
+  geom_point( position = position_dodge2(
+  width = 1,
+  preserve = "total",
+  padding = 0.1,
+  reverse = FALSE
+
+))+
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1), panel.spacing.x = unit(0.001, "cm"),
+        strip.text.x = element_blank()) +
+scale_color_d3("category20") + xlab("AUROC") + ylab("Feature Sets")
+  # + ggtitle("SDOHD EPA, EPA AQS imputation methods")
+
+plt_by_feats # Show plot
+
+
+
+###############
+
+```
+
+
+# Experiment 3 (combines SDOHD vars & 2 air quality data sources)
+```{r}
+# First filter for these subgroups only
+sgs_selected <- c("black", "white") # c("black", "white", "male", "female", "other")
+subset_sgs <- filter(df_2_baseline_sg_results, subgroup %in%  sgs_selected)
+# Stratify by feat, then by subgroup.
+by_feat_groups <- subset_sgs %>% group_by(feat, subgroup) %>% summarise(mean_auc = auc) %>% arrange(feat, desc(mean_auc))
+
+
+
+feat_order <- c( "age_current",
+        "sex",
+        "demo",
+        "hf_vars",
+        "comorb",
+        "hf_with_comorb",
+        "demo_comorb",
+        "charlson",
+        "hf_with_charlson",
+
+        "adi_national", "adi_state", 
+        "svi",
+        "sdi",
+        
+
+        "intersect_county_AHRQ_median",
+        "intersect_tract_AHRQ_median",
+
+        "intersect_county_AHRQ_median_w_EPAA_spatial",
+        "intersect_tract_AHRQ_median_w_EPAA_spatial",
+
+        "intersect_county_AHRQ_median_w_EPA_AQS_spatial",
+        "intersect_tract_AHRQ_median_w_EPA_AQS_spatial"
+
+        
+        
+        )
+
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% feat_order, ]
+
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=feat_order)
+
+
+# RENAME: 
+RENAME_cols <- c("Age",
+                 "Sex",
+                 "Demo",
+                 "HF Type",
+                 "Comorb",
+                 "HF Type+Comorb",
+                 "Demo+Comorb",
+                 "CCI",
+                 "HF Type+CCI",
+                 "ADI: National Rank",
+                 "ADI: State Rank",
+                 "SVI",
+                 "SDI",
+                 
+                 "Intersection AHRQ: County",
+                 "Intersection AHRQ: Tract",
+                 
+                 "Intersection AHRQ (County) + AHRQ EPA spatial",
+                 "Intersection AHRQ (Tract) + AHRQ EPA spatial",
+                 
+                 "Intersection AHRQ (County) + EPA AQS spatial",
+                 "Intersection AHRQ (Tract) + EPA AQS spatial"
+                  )
+
+
+
+rename_map <- setNames(RENAME_cols, feat_order)
+by_feat_groups <- by_feat_groups %>% mutate(feat = rename_map[as.character(feat)])
+
+by_feat_groups
+
+# Reorder again
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% RENAME_cols, ]
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=rev(RENAME_cols))
+
+  
+
+# Make plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=mean_auc, y=feat, group=feat, color=subgroup, group=INDEX, color=INDEX)) +
+geom_line() +
+  geom_point( position = position_dodge2(
+  width = 1,
+  preserve = "total",
+  padding = 0.1,
+  reverse = FALSE
+
+))+
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1), panel.spacing.x = unit(0.001, "cm"),
+        strip.text.x = element_blank()) +
+scale_color_d3("category20") + xlab("AUROC") + ylab("Feature Sets")
+  # + ggtitle("") # Agnostic Model: XGBoost - AHRQ + Air Quality
+
+plt_by_feats # Show plot
+
+########
+
+```
+
+
+# Experiment 4: County & tract intersection (without AHRQ EPAA) *VS.* including EPA_AQS
+```{r}
+# First filter for these subgroups only
+sgs_selected <- c("black", "white") # c("black", "white", "male", "female", "other")
+subset_sgs <- filter(df_2_baseline_sg_results, subgroup %in%  sgs_selected)
+# Stratify by feat, then by subgroup.
+by_feat_groups <- subset_sgs %>% group_by(feat, subgroup) %>% summarise(mean_auc = auc) %>% arrange(feat, desc(mean_auc))
+
+
+
+feat_order <- c( "age_current",
+        "sex",
+        "demo",
+        "hf_vars",
+        "comorb",
+        "hf_with_comorb",
+        "demo_comorb",
+        "charlson",
+        "hf_with_charlson",
+
+        "adi_national", "adi_state", 
+        "sdi", "sdi_score", 
+        "svi",
+        
+        "intersect_county_AHRQ_median",
+        "intersect_county_AHRQ_median_w_EPA_AQS_spatial"
+
+        )
+
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% feat_order, ]
+
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=feat_order)
+
+  
+
+# Make plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=feat, y=mean_auc, group=feat, color=subgroup, group=INDEX, color=INDEX)) +
+geom_line() +
+  geom_point( position = position_dodge2(
+  width = 1,
+  preserve = "total",
+  padding = 0.1,
+  reverse = FALSE
+
+))+
+    facet_grid(cols = vars(feat), scales = "free_x", space = "free_x") +
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1), panel.spacing.x = unit(0.001, "cm"),
+        strip.text.x = element_blank()) +
+scale_color_d3("category20") +
+  ggtitle("Agnostic Model: XGBoost: AHRQ - EPAA + external EPA")
+
+plt_by_feats # Show plot
+```
+
+# Experiment 5: total AHRQ + EPAA or EPA AQS
+```{r}
+# First filter for these subgroups only
+sgs_selected <- c("black", "white") # c("black", "white", "male", "female", "other")
+subset_sgs <- filter(df_2_baseline_sg_results, subgroup %in%  sgs_selected)
+# Stratify by feat, then by subgroup.
+by_feat_groups <- subset_sgs %>% group_by(feat, subgroup) %>% summarise(mean_auc = auc) %>% arrange(feat, desc(mean_auc))
+
+
+
+feat_order <- c( "age_current",
+        "sex",
+        "demo",
+        "hf_vars",
+        "comorb",
+        "hf_with_comorb",
+        "demo_comorb",
+        "charlson",
+        "hf_with_charlson",
+
+        "adi_national", "adi_state", 
+        "sdi", "sdi_score", 
+        "svi",
+        
+        
+        "county_AHRQ_median_without_EPAA",
+
+        "tot_county_AHRQ_median_without_EPAA_w_EPA_AQS_median",  
+        "tot_county_AHRQ_median_without_EPAA_w_EPA_AQS_spatial", 
+
+        "tot_county_AHRQ_median_w_EPAA_w_EPA_AQS_median", 
+        "tot_county_AHRQ_median_w_EPAA_w_EPA_AQS_spatial",  
+                "tot_county_AHRQ_median_w_EPAA_spatial_w_EPA_AQS_spatial"
+
+
+        )
+
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% feat_order, ]
+
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=feat_order)
+
+  
+
+# Make plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=mean_auc, y=feat, group=feat, color=subgroup, group=INDEX, color=INDEX)) +
+geom_line() +
+  geom_point( position = position_dodge2(
+  width = 1,
+  preserve = "total",
+  padding = 0.1,
+  reverse = FALSE
+
+))+
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1), panel.spacing.x = unit(0.001, "cm"),
+        strip.text.x = element_blank()) +
+scale_color_d3("category20") +
+    xlab("AUROC") +
+  ylab("Feautre Set") +
+  ggtitle("") # Agnostic Model: XGBoost: AHRQ - EPAA + external EPA
+
+plt_by_feats # Show plot
+
+
+```
+
+
+# Experiment 6:[COUNTY] AHRQ 5 domains vs. total AHRQ
+```{r}
+# First filter for these subgroups only
+sgs_selected <- c("black", "white") # c("black", "white", "male", "female", "other")
+subset_sgs <- filter(df_2_baseline_sg_results, subgroup %in%  sgs_selected)
+# Stratify by feat, then by subgroup.
+by_feat_groups <- subset_sgs %>% group_by(feat, subgroup) %>% summarise(mean_auc = auc) %>% arrange(feat, desc(mean_auc))
+
+# "tot_county_AHRQ_median",
+# "tot_tract_AHRQ_median",
+
+feat_order <- c( "age_current",
+        "sex",
+        "demo",
+        "hf_vars",
+        "comorb",
+        "hf_with_comorb",
+        "demo_comorb",
+        "charlson",
+        "hf_with_charlson",
+
+        "adi_national", "adi_state",
+        "svi",
+        "sdi",
+        
+        "intersect_county_AHRQ_median",
+            "intersect_tract_AHRQ_median",
+        
+        "county_medianIMP_ahrq_1_socialcontext",
+                "tract_medianIMP_ahrq_1_socialcontext",
+
+        "county_medianIMP_ahrq_2_economiccontext", 
+                    "tract_medianIMP_ahrq_2_economiccontext",
+
+        "county_medianIMP_ahrq_3_education",
+                    "tract_medianIMP_ahrq_3_education",
+
+        "county_medianIMP_ahrq_4_physicalinfrastructure",
+                    "tract_medianIMP_ahrq_4_physicalinfrastructure",
+
+        "county_medianIMP_ahrq_5_healthcarecontext",
+                    "tract_medianIMP_ahrq_5_healthcarecontext"
+        )
+
+
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% feat_order, ]
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=feat_order)
+
+  
+
+# "Total AHRQ:                            County",
+# "Total AHRQ: Tract",
+# RENAME: 
+RENAME_cols <- c("Age",
+                 "Sex",
+                 "Demo",
+                 "HF Type",
+                 "Comorb",
+                 "HF Type+Comorb",
+                 "Demo+Comorb",
+                 "CCI",
+                 "HF Type+CCI",
+                 "ADI: National Rank",
+                 "ADI: State Rank",
+                 "SVI",
+                 "SDI",
+                 
+
+                 
+                  "Intersection AHRQ:                    County",
+                  "Intersection AHRQ: Tract",
+                 
+                 "Domain 1 Social Content: County",
+                 "D1: Tract",
+                 "Domain 2 Economic Context: County",
+                 "D2: Tract",
+                 "Domain 3 Education Context: County",
+                 "D3: Tract",
+                 "Domain 4 Physical Infra.: County",
+                 "D4: Tract",
+                 "Domain 5 Healthcare Context: County",
+                 "D5: Tract"
+                  )
+
+
+
+rename_map <- setNames(RENAME_cols, feat_order)
+by_feat_groups <- by_feat_groups %>% mutate(feat = rename_map[as.character(feat)])
+
+by_feat_groups
+
+# Reorder again
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% RENAME_cols, ]
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=rev(RENAME_cols))
+
+
+# Make plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=mean_auc, y=feat, group=feat, color=subgroup, group=INDEX, color=INDEX)) +
+geom_line() +
+  geom_point( position = position_dodge2(
+  width = 1,
+  preserve = "total",
+  padding = 0.1,
+  reverse = FALSE
+
+))+
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1), panel.spacing.x = unit(0.001, "cm"),
+        strip.text.x = element_blank()) +
+scale_color_d3("category20") +
+  xlab("AUROC") +
+  ylab("Feautre Set") +
+  ggtitle("") # Agnostic Model: XGBoost: County - AHRQ Individual Domains
+
+plt_by_feats # Show plot
+
+
+########
+```
+
+# Experiment 7:[TRACT] AHRQ 5 domains vs. total AHRQ
+```{r}
+# First filter for these subgroups only
+sgs_selected <- c("black", "white") # c("black", "white", "male", "female", "other")
+subset_sgs <- filter(df_2_baseline_sg_results, subgroup %in%  sgs_selected)
+# Stratify by feat, then by subgroup.
+by_feat_groups <- subset_sgs %>% group_by(feat, subgroup) %>% summarise(mean_auc = auc) %>% arrange(feat, desc(mean_auc))
+
+
+
+feat_order <- c( "age_current",
+        "sex",
+        "demo",
+        "hf_vars",
+        "comorb",
+        "hf_with_comorb",
+        "demo_comorb",
+        "charlson",
+        "hf_with_charlson",
+
+        "adi_national", "adi_state", 
+        "sdi", "sdi_score", 
+        "svi",
+        
+        "tot_tract_AHRQ_median",
+        
+        "tract_medianIMP_ahrq_1_socialcontext",
+            "tract_medianIMP_ahrq_2_economiccontext",
+            "tract_medianIMP_ahrq_3_education",
+            "tract_medianIMP_ahrq_4_physicalinfrastructure",
+            "tract_medianIMP_ahrq_5_healthcarecontext"
+
+
+        )
+
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% feat_order, ]
+
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=feat_order)
+
+  
+
+# Make plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=mean_auc, y=feat, group=feat, color=subgroup, group=INDEX, color=INDEX)) +
+geom_line() +
+  geom_point( position = position_dodge2(
+  width = 1,
+  preserve = "total",
+  padding = 0.1,
+  reverse = FALSE
+
+))+
+    
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1), panel.spacing.x = unit(0.001, "cm"),
+        strip.text.x = element_blank()) +
+scale_color_d3("category20") +
+  ggtitle("Agnostic Model: Tract - AHRQ Individual Domains")
+
+plt_by_feats # Show plot
+```
+
+
+# To answer question: "DOES RAW AQI/AHRQ DATA, OR COMBINING AQI/AHRQ WITH DEMO/COMORB, IMPROVE AUC WITHIN A SUBGROUP?"
+
+```{r}
+# Stratify by subgroup, then by feat
+by_sgs <- df_2_baseline_sg_results %>% group_by(subgroup, feat) %>% summarise(mean_auc = auc) %>% group_by(subgroup) %>% arrange(subgroup, desc(mean_auc))
+
+
+# 1.) Show black table (in decr AUC)
+black_decr_auc <- filter(by_sgs, subgroup == "black")
+black_decr_auc
+
+# 2.) Show white table (in decr AUC)
+white_decr_auc <- filter(by_sgs, subgroup == "white")
+white_decr_auc
+
+# Make plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=subgroup, y=mean_auc, group=feat, color=feat)) +
+geom_line()+
+geom_jitter(aes(x=subgroup,
+        y = mean_auc,
+        color = feat),
+    size=2,
+    show.legend=TRUE,
+    width = 0.1) +
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1))
+
+plt_by_feats # Show plot
+
+
+###################
+# Rename to black_mean_auc, white_mean_auc
+colnames(black_decr_auc)[colnames(black_decr_auc) == "mean_auc"] ="Black: Mean AUROC"
+colnames(white_decr_auc)[colnames(white_decr_auc) == "mean_auc"] ="White: Mean AUROC"
+
+# Drop both subgroup columns.
+black_decr_auc <- subset(black_decr_auc, select = -c(subgroup))
+white_decr_auc <- subset(white_decr_auc, select = -c(subgroup))
+
+
+# Merge on feat.
+races_by_feats <- merge(black_decr_auc, white_decr_auc, by.x="feat", by.y="feat")
+
+# Sort by descending AUC for *black*, not white. 
+races_by_feats <- races_by_feats[order(races_by_feats$"Black: Mean AUROC", decreasing = TRUE),]  
+
+# Plot
+#data = matrix(races_by_feats, ncol=3, byrow=TRUE)
+ 
+# specify the column names and row names of matrix
+colnames(races_by_feats) = c('Features', 'Black: Mean AUROC', 'White: Mean AUROC')
+
+# assign to table
+LT_table = as.data.table(races_by_feats)
+
+
+j1 <- which.max(unlist(LT_table[,"Black: Mean AUROC"]))
+j2 <- which.max(unlist(LT_table[,"White: Mean AUROC"]))
+col <- seq_len(ncol(LT_table))
+LT_table[j1,"Black: Mean AUROC"] <- LT_table[j1,"Black: Mean AUROC"] %>% cell_spec(bold = col == j1)
+LT_table[j2,"White: Mean AUROC"] <- LT_table[j2,"White: Mean AUROC"] %>% cell_spec(bold = col == j2)
+
+LT_table[j1,"Black: Mean AUROC"]
+
+
+LT_table %>%
+  kbl(caption="Total Features: AUROC by Race",
+       format= "html",
+   col.names = c("Features", "Black: Mean AUROC", "White: Mean AUROC"),
+                  align="r",
+                  digits = 5
+   ) %>%
+   kable_classic(full_width = F, html_font = "cambria")
+```
+
+
+# E2 New: replace vs. agument Air quality
+```{r}
+#################################
+
+# First filter for these subgroups only
+sgs_selected <- c("black", "white") # c("black", "white", "male", "female", "other")
+subset_sgs <- filter(df_2_baseline_sg_results, subgroup %in%  sgs_selected)
+# Stratify by feat, then by subgroup.
+by_feat_groups <- subset_sgs %>% group_by(feat, subgroup) %>% summarise(mean_auc = auc) %>% arrange(feat, desc(mean_auc))
+
+fcheck <- df_2_baseline_sg_results$feat
+
+
+feat_order <- c( "age_current",
+        "sex",
+        "demo",
+        "hf_vars",
+        "comorb",
+        "hf_with_comorb",
+        "demo_comorb",
+        "charlson",
+        "hf_with_charlson",
+
+        "adi_national", "adi_state", 
+        "svi",
+        "sdi",
+        
+        
+        
+        "county_AHRQ_median_without_EPAA",
+        "tot_county_AHRQ_median_without_EPAA_w_EPA_AQS_median", 
+        "tot_county_AHRQ_median",
+        "tot_county_AHRQ_median_w_EPAA_w_EPA_AQS_median"
+
+        )
+
+
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% feat_order, ]
+
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=feat_order)
+
+
+# RENAME: 
+RENAME_cols <- c("Age",
+                 "Sex",
+                 "Demo",
+                 "HF Type",
+                 "Comorb",
+                 "HF Type+Comorb",
+                 "Demo+Comorb",
+                 "CCI",
+                 "HF Type+CCI",
+                 "ADI: National Rank",
+                 "ADI: State Rank",
+                 "SVI",
+                 "SDI",
+                 
+                 "Neither: AHRQ - AHRQ EPA",
+                 "AHRQ",
+                 "AHRQ - AHRQ EPA + EPA AQS",
+                 "Both: AHRQ + EPA AQS"
+
+                  )
+
+
+# "Neither: AHRQ*",
+ # "Only AHRQ* + AHRQ EPA",
+ # "Only AHRQ* + EPA AQS",
+ # "Both: AHRQ + AHRQ EPA + EPA AQS"
+                 
+                 
+        # "county_AHRQ_median_without_EPAA",
+        # "tot_county_AHRQ_median_without_EPAA_w_EPA_AQS_median", 
+        # "tot_county_AHRQ_median",
+        # "tot_county_AHRQ_median_w_EPAA_w_EPA_AQS_median"
+
+
+
+
+rename_map <- setNames(RENAME_cols, feat_order)
+by_feat_groups <- by_feat_groups %>% mutate(feat = rename_map[as.character(feat)])
+
+
+# Reorder again
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% RENAME_cols, ]
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=rev(RENAME_cols))
+
+  
+
+# Make plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=mean_auc, y=feat, group=feat, color=subgroup, group=INDEX, color=INDEX)) +
+geom_line() +
+  geom_point( position = position_dodge2(
+  width = 1,
+  preserve = "total",
+  padding = 0.1,
+  reverse = FALSE
+
+))+
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1), panel.spacing.x = unit(0.001, "cm"),
+        strip.text.x = element_blank()) +
+scale_color_d3("category20") + xlab("AUROC") + ylab("Feature Sets")
+  ggtitle("") # Agnostic Model: XGBoost - AHRQ + Air Quality
+
+plt_by_feats # Show plot
+```
+
+
+# Same e2, but using spatial imp (except AHRQ row uses median imp for EPAA)
+```{r}
+
+
+
+# First filter for these subgroups only
+sgs_selected <- c("black", "white") # c("black", "white", "male", "female", "other")
+subset_sgs <- filter(df_2_baseline_sg_results, subgroup %in%  sgs_selected)
+# Stratify by feat, then by subgroup.
+by_feat_groups <- subset_sgs %>% group_by(feat, subgroup) %>% summarise(mean_auc = auc) %>% arrange(feat, desc(mean_auc))
+
+fcheck <- df_2_baseline_sg_results$feat
+
+
+feat_order <- c( "age_current",
+        "sex",
+        "demo",
+        "hf_vars",
+        "comorb",
+        "hf_with_comorb",
+        "demo_comorb",
+        "charlson",
+        "hf_with_charlson",
+
+        "adi_national", "adi_state", 
+        "svi",
+        "sdi",
+        
+        
+        
+        "county_AHRQ_median_without_EPAA",
+        "tot_county_AHRQ_median_without_EPAA_w_EPA_AQS_spatial", 
+        "tot_county_AHRQ_median",
+        "tot_county_AHRQ_median_w_EPAA_spatial_w_EPA_AQS_spatial"
+
+
+        )
+
+
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% feat_order, ]
+
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=feat_order)
+
+
+# RENAME: 
+RENAME_cols <- c("Age",
+                 "Sex",
+                 "Demo",
+                 "HF Type",
+                 "Comorb",
+                 "HF Type+Comorb",
+                 "Demo+Comorb",
+                 "CCI",
+                 "HF Type+CCI",
+                 "ADI: National Rank",
+                 "ADI: State Rank",
+                 "SVI",
+                 "SDI",
+                 
+                 "Neither: AHRQ - AHRQ EPA",
+                 "AHRQ",
+                 "AHRQ - AHRQ EPA + EPA AQS",
+                 "Both: AHRQ + EPA AQS"
+
+                  )
+
+
+# "Neither: AHRQ*",
+ # "Only AHRQ* + AHRQ EPA",
+ # "Only AHRQ* + EPA AQS",
+ # "Both: AHRQ + AHRQ EPA + EPA AQS"
+                 
+                 
+        # "county_AHRQ_median_without_EPAA",
+        # "tot_county_AHRQ_median_without_EPAA_w_EPA_AQS_median", 
+        # "tot_county_AHRQ_median",
+        # "tot_county_AHRQ_median_w_EPAA_w_EPA_AQS_median"
+
+
+
+
+rename_map <- setNames(RENAME_cols, feat_order)
+by_feat_groups <- by_feat_groups %>% mutate(feat = rename_map[as.character(feat)])
+
+
+# Reorder again
+by_feat_groups <- by_feat_groups[by_feat_groups$feat %in% RENAME_cols, ]
+by_feat_groups$feat <- factor(by_feat_groups$feat, levels=rev(RENAME_cols))
+
+  
+
+# Make plot
+plt_by_feats <- ggplot(
+    data = by_feat_groups, 
+    aes(x=mean_auc, y=feat, group=feat, color=subgroup, group=INDEX, color=INDEX)) +
+geom_line() +
+  geom_point( position = position_dodge2(
+  width = 1,
+  preserve = "total",
+  padding = 0.1,
+  reverse = FALSE
+
+))+
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1), panel.spacing.x = unit(0.001, "cm"),
+        strip.text.x = element_blank()) +
+scale_color_d3("category20") + xlab("AUROC") + ylab("Feature Sets")
+  ggtitle("") # Agnostic Model: XGBoost - AHRQ + Air Quality
+
+plt_by_feats # Show plot
+```
+
+

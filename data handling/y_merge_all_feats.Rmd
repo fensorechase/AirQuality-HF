@@ -1,0 +1,438 @@
+---
+title: "merge_all_feats"
+author: ""
+date: "2023-09-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(data.table)
+library(caret)
+
+#install.packages("kableExtra")
+library(kableExtra)
+library(knitr)
+
+
+# Set wd when not in RStudio
+setwd('__ PATH HERE __')
+
+source('./data_cleaners.R')
+
+EPA_AQS_median <- read.csv("./COUNTY_AHRQ/EPA_AQS_median_imp.csv") # Has median imp. ID: COUNTY_FIPS
+EPA_AQS_mean <- read.csv("./COUNTY_AHRQ/EPA_AQS_mean_imp.csv") # Has mean imp. ID: COUNTY_FIPS
+EPA_AQS_spatial <- read.csv("./totalCountry_final_spatial_imp_1.csv") # Has spatial imp. ID: COUNTY_FIPS
+
+EPAA_AHRQ_spatial <- read.csv("./COUNTY_AHRQ/AHRQ_EPAA_final_spatial_imp_1.csv") # ID: COUNTYFIPS
+
+AHRQ_tract_final <- read.csv("./TRACT_AHRQ/tract_ahrq_final_clean_baseline.csv") # Has median, mean. ID: TRACTFIPS, COUNTYFIPS
+# Note: ^ still must preserve COUNTYFIPS col in AHRQ_tract_final ... to perform merge. Since all other dfs here have COUNTYFIPS key.
+AHRQ_county_final <- read.csv("./COUNTY_AHRQ/county_ahrq_final_clean_baseline.csv") # Has median, mean. ID: COUNTYFIPS
+
+# Print names for feature inputs:
+# options(max.print = 10000)
+county_feats <- as.data.frame(names(AHRQ_county_final))
+write.csv(county_feats, file="./COUNTY_FEAT_NAMES.csv", row.names=FALSE) 
+
+tract_feats <- as.data.frame(names(AHRQ_tract_final))
+write.csv(tract_feats, file="./TRACT_FEAT_NAMES.csv", row.names=FALSE)
+
+
+
+```
+
+
+# Then merge all (on census tract FIPS, or county. Whichever is available.)
+```{r}
+# After, check to ensure NO missing vals for spatially imputed columns: 
+
+# 1.) Merge AHRQ_tract_final && AHRQ_county_final 
+AHRQ_tract_final <- data.frame(AHRQ_tract_final)
+AHRQ_county_final <- data.frame(AHRQ_county_final)
+
+# Avoid duplicating cols.
+dup_cols <- intersect(names(AHRQ_tract_final), names(AHRQ_county_final))
+cols_wo_dups <- setdiff(names(AHRQ_county_final), dup_cols)
+cols_wo_dups <- c(cols_wo_dups, c("Encounter"))
+# Add Encounter for merge
+
+#ahrq_AQI_baseline_final <- merge(ahrq_baseline, baseline_AQI_imp_1, by.x=c("COUNTYFIPS", "YEAR"), by.y=c("COUNTY_FIPS", "YEAR"))
+final_df <- merge(AHRQ_tract_final, AHRQ_county_final[cols_wo_dups], by="Encounter") # by.x=c("COUNTYFIPS", "YEAR"), by.y=c("COUNTYFIPS", "YEAR")
+# Rename cols: YEAR.x, COUNTYFIPS.x
+# Rename COUNTYFIPS.x to COUNTYFIPS:
+colnames(final_df)[colnames(final_df) == "COUNTYFIPS.x"] = "COUNTYFIPS"
+colnames(final_df)[colnames(final_df) == "YEAR.x"] = "YEAR"
+# Drop COUNTY_FIPS, COUNTYFIPS.y
+final_df <- subset(final_df, select = -c(COUNTYFIPS.y, COUNTY_FIPS))
+```
+
+
+
+```{r}
+########################
+# 2.) Merge EPA_AQS_median && EPA_AQS_mean && EPA_AQS_spatial && EPAA_AHRQ_spatial
+dim(EPAA_AHRQ_spatial) # 3239 counties
+dim(EPA_AQS_median) # 3281 counties.
+# So, left join to smaller one (EPAA_AHRQ_spatial)
+# Note: these AQ dfs are national, so not all will be used on join to patient dataset.
+AQ_total <- merge(EPA_AQS_median, EPA_AQS_mean, by="COUNTY_FIPS") 
+
+AQ_total <- merge(AQ_total, EPA_AQS_spatial, by="COUNTY_FIPS")
+AQ_total <- merge(AQ_total, EPAA_AHRQ_spatial, by.x="COUNTY_FIPS", by.y="COUNTYFIPS")
+
+```
+
+
+```{r}
+########################
+# 3.) Turn AQ_total --> wide format. To let years be accessible. 
+
+# First, Drop County.x
+AQ_total <- subset(AQ_total, select = -c(County, County.x, County.y, State, State.x, State.y))
+
+# Use original_df for making LONG version of AQI_imp_1
+original_df <- AQ_total
+
+county_fips <- original_df$COUNTY_FIPS
+
+# Extract year from column names
+years <- as.numeric(substr(colnames(original_df)[-1], nchar(colnames(original_df)[-1]) - 3, nchar(colnames(original_df)[-1])))
+
+# Reshape the dataframe
+reshaped_df <- pivot_longer(original_df, cols = -COUNTY_FIPS, names_to = "temp", values_to = "Value")
+
+# Extract the AQI component name and year from the 'temp' column
+reshaped_df$AQI_Component <- gsub("\\.\\d+$", "", reshaped_df$temp)
+reshaped_df$YEAR <- years[match(gsub("^.*\\.(\\d+)$", "\\1", reshaped_df$temp), years)]
+
+# Remove the temporary column
+reshaped_df <- reshaped_df[, c("COUNTY_FIPS", "AQI_Component", "YEAR", "Value")]
+
+# Pivot the dataframe to get the desired structure
+AQ_long <- pivot_wider(reshaped_df, names_from = AQI_Component, values_from = Value)
+
+# Combine 'COUNTY_FIPS' and 'YEAR' columns
+AQ_long$YEAR <- as.character(AQ_long$YEAR)
+AQ_long$COUNTY_FIPS <- rep(county_fips, each = length(unique(AQ_long$YEAR)))
+
+
+# Drop leftover non-feat columns:
+AQ_long <- subset(AQ_long, select = -c(AHRQ_spatialIMP.STATEFIPS))
+
+AQ_long
+
+
+
+aqs_all <- as.data.frame(names(AQ_long))
+write.csv(aqs_all, file="./AQS_ALL_FEAT_NAMES.csv", row.names=FALSE)
+
+```
+
+
+```{r}
+########################
+# 3.) Merge final_df && AQ_long
+# Match 1: final_df$COUNTYFIPS & AQ_long$COUNTYFIPS
+# Match 2: orig_df$YEAR & AQ_long$YEAR
+
+input_feats <- merge(final_df, AQ_long, by.x=c("COUNTYFIPS", "YEAR"), by.y=c("COUNTY_FIPS", "YEAR"))
+
+# input_feats: our input dataframe to classification models.
+
+# Labels cleanup
+# Drop folds cols.
+input_feats <- subset(input_feats, select = -c(readmit30bin_folds, death30bin_folds, composite30_folds))
+# Re-create folds: 
+
+endpoints <- c("readmit30bin", "death30bin", "composite30")
+input_feats <- create_folds(as.data.frame(input_feats), endpoints)
+
+min(input_feats$YEAR, na.rm=T)
+
+write.csv(input_feats, file="./9-6-total_feats.csv", row.names=FALSE) 
+
+
+max(input_feats$spatialIMP.Good.Days)
+
+
+
+# Missing county_medianIMP : "county_medianIMP_ACS_PCT_HH_NO_SP_JENKINS", "county_medianIMP_ACS_PCT_REL_FF", "county_medianIMP_ACS_PCT_REL_GRANDCHILD", "county_medianIMP_ACS_PCT_REL_GQ_CHLD", "county_medianIMP_ACS_PCT_REL_GQ_ELD", "county_medianIMP_ACS_PCT_REL_UNDER_18", "county_medianIMP_ACS_PCT_REL_UNDER_6", "county_medianIMP_ACS_PCT_REL_UNDER_6_ONLY", "county_medianIMP_ACS_PCT_REL_UNDER_6_OTHER", "county_medianIMP_ACS_PCT_REL_UNDER_18_OTHER", "county_medianIMP_ACS_PCT_REL_UNDER_18_ONLY", "county_medianIMP_ACS_PCT_REL_FF_ONLY", "county_medianIMP_ACS_PCT_REL_FF_OTHER", "county_medianIMP_ACS_PCT_REL_SP_MARR", "county_medianIMP_ACS_PCT_REL_SP_NOMARR", "county_medianIMP_ACS_PCT_REL_SP_OTHER", "county_medianIMP_ACS_PCT_REL_UNSURE", "county_medianIMP_ACS_PCT_REL_U18_MF_ONLY", "county_medianIMP_ACS_PCT_REL_U18_MF_OTHER", "county_medianIMP_ACS_PCT_REL_U18_M_ONLY", "county_medianIMP_ACS_PCT_REL_U18_M_OTHER", "county_medianIMP_ACS_PCT_REL_U18_F_ONLY", "county_medianIMP_ACS_PCT_REL_U18_F_OTHER", "county_medianIMP_ACS_PCT_REL_U18_F_MF_ONLY", "county_medianIMP_ACS_PCT_REL_U18_F_MF_OTHER", "county_medianIMP_ACS_PCT_GRANDP_GC_OTH_REL", "county_medianIMP_ACS_PCT_GRANDP_GC_OTHER", "county_medianIMP_ACS_PCT_REL_GQ_CHLD_ONLY", "county_medianIMP_ACS_PCT_REL_GQ_ELD_ONLY", "county_medianIMP_ACS_PCT_HH_KID_2PR", "county_medianIMP_ACS_PCT_FEMALE_UNDER18_NO_GRANDCHILD_FEMALE_NVR_MARRIED", "county_medianIMP_ACS_PCT_FEMALE_UNDER18_NO_GRANDCHILD_FEMALE_HH_KID_2PR"
+
+
+# Missing tract_medianIMP :  "tract_medianIMP_ACS_PCT_HH_NO_SP_JENKINS", "tract_medianIMP_ACS_PCT_REL_FF", "tract_medianIMP_ACS_PCT_REL_GRANDCHILD", "tract_medianIMP_ACS_PCT_REL_GQ_CHLD", "tract_medianIMP_ACS_PCT_REL_GQ_ELD", "tract_medianIMP_ACS_PCT_REL_UNDER_18", "tract_medianIMP_ACS_PCT_REL_UNDER_6", "tract_medianIMP_ACS_PCT_REL_UNDER_6_ONLY", "tract_medianIMP_ACS_PCT_REL_UNDER_6_OTHER", "tract_medianIMP_ACS_PCT_REL_UNDER_18_OTHER", "tract_medianIMP_ACS_PCT_REL_UNDER_18_ONLY", "tract_medianIMP_ACS_PCT_REL_FF_ONLY", "tract_medianIMP_ACS_PCT_REL_FF_OTHER", "tract_medianIMP_ACS_PCT_REL_SP_MARR", "tract_medianIMP_ACS_PCT_REL_SP_NOMARR", "tract_medianIMP_ACS_PCT_REL_SP_OTHER", "tract_medianIMP_ACS_PCT_REL_UNSURE", "tract_medianIMP_ACS_PCT_REL_U18_MF_ONLY", "tract_medianIMP_ACS_PCT_REL_U18_MF_OTHER", "tract_medianIMP_ACS_PCT_REL_U18_M_ONLY", "tract_medianIMP_ACS_PCT_REL_U18_M_OTHER", "tract_medianIMP_ACS_PCT_REL_U18_F_ONLY", "tract_medianIMP_ACS_PCT_REL_U18_F_OTHER", "tract_medianIMP_ACS_PCT_REL_U18_F_MF_ONLY", "tract_medianIMP_ACS_PCT_REL_U18_F_MF_OTHER", "tract_medianIMP_ACS_PCT_GRANDP_GC_OTH_REL", "tract_medianIMP_ACS_PCT_GRANDP_GC_OTHER", "tract_medianIMP_ACS_PCT_REL_GQ_CHLD_ONLY", "tract_medianIMP_ACS_PCT_REL_GQ_ELD_ONLY", "tract_medianIMP_ACS_PCT_HH_KID_2PR", "tract_medianIMP_ACS_PCT_FEMALE_UNDER18_NO_GRANDCHILD_FEMALE_NVR_MARRIED", "tract_medianIMP_ACS_PCT_FEMALE_UNDER18_NO_GRANDCHILD_FEMALE_HH_KID_2PR"
+
+
+
+  
+
+```
+
+
+```{r}
+# Summary: 
+# ___________ Only include air quality vars: 
+# Input features: 
+# 1.) National EPA AQS imputed: counties via national spatial imputation
+#   a.) spatial file: "totalCountry_final_spatial_imp_1.csv"
+#   b.) med file: EPA_AQS_median_imp.csv
+#   c.) mean file: EPA_AQS_mean_imp.csv
+# - we should subset ONLY GA counties first. 
+
+
+# 2.) National *AHRQ EPA imputed: counties via national spatial imputation
+# input file: "AHRQ_EPAA_final_spatial_imp_1.csv"
+
+# ___________ Including tractmlm vars: 
+# 3.) COUNTY AHRQ total: 2 diff imp versions (med, mean)
+# ** includes med, mean imp for AHRQ EPAA vars.
+# file: county_ahrq_final_clean_baseline.csv
+
+# 4.) TRACT AHRQ total: 2 diff imp versions (med, mean)
+# ** includes med, mean imp for AHRQ EPAA vars.
+# file: tract_ahrq_final_clean_baseline.csv
+```
+
+# Generate table 1: with "other"
+
+```{r}
+## tableone package itself
+library(tableone)
+
+# Make strata column: white, black, other (1,2,3)
+# make using cols:
+trans_input_feats <- data_frame <- transform(
+  input_feats, "Race"= ifelse(white==1, "White", ifelse(black==1, "Black", ifelse(other==1, "other", 0))))
+  
+
+# Make insurance column: "privinsurance","Medicare", "Medicaid",
+trans_input_feats <- data_frame <- transform(
+  trans_input_feats, "Insurance_type"= ifelse(privinsurance==1, "Private", ifelse(Medicare==1, "Medicare", ifelse(Medicaid==1, "Medicaid", "Not recorded"))))
+  
+
+# Make HF type: hfsystolic, hfdiastolic, hfother
+trans_input_feats <- data_frame <- transform(
+  trans_input_feats, "HF_classification"= ifelse(hfsystolic==1, "Systolic (HFrEF)", ifelse(hfdiastolic==1, "Diastolic (HFpEF)", ifelse(hfother==1, "Other", "Not recorded"))))
+
+
+
+# vars to summarize (i.e demographics)
+# htn: Hypertension
+# diabetes: ___not available___
+# cad: Coronary Artery Disease
+# ckd: Chronic Kidney Disease
+# sdi: Social deprivation index score
+# ADI_national_rank: 
+# ADI_state_rank: 
+# svi: i.e. RPL_THEMES
+# cci: Charlson Comorbidity Index
+# Systolic_BP: Systolic blood pressure, mm Hg
+# Heart_Rate: Heart Rate, beats per minute
+# Resp: Respiratory rate, breaths per minute
+
+# Rename feats not needing spaces: 
+colnames(trans_input_feats)[colnames(trans_input_feats) == "age_current"] ="Age, years"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "female"] = "Women"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "htn"] = "Hypertension"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "cad"] = "Coronary Artery Disease"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "ckd"] = "Chronic Kidney Disease"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "cci"] = "Charlson Comorbidity Index"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "Systolic_BP"] = "Systolic blood pressure, mm Hg"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "Heart_Rate"] = "Heart Rate, beats per minute"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "Resp"] = "Respiratory rate, breaths per minute"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "sdi"] = "Social deprivation index score"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "ADI_national_rank"] = "Area deprivation index, national rank"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "ADI_state_rank"] = "Area deprivation index, state rank"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "RPL_THEMES"] = "Social vulnerability index score"
+# New feats:
+colnames(trans_input_feats)[colnames(trans_input_feats) == "readmit30bin"] = "30-day Binary HF Readmission"
+
+# Rename feats with spaces: 
+colnames(trans_input_feats)[colnames(trans_input_feats) == "Insurance_type"] = "Insurance type"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "HF_classification"] = "HF classification"
+
+
+
+
+# Length of stay, days: LOScheck
+#myVars <- c("Age, years", "female", "Insurance type", "HF classification", "htn", "cad", "ckd", "cci", 
+#            "Systolic_BP", "Heart_Rate", "Resp", 
+#            "LOScheck", "sdi", "ADI_national_rank", "ADI_state_rank", "RPL_THEMES")
+
+myVars <- c("Age, years", "Women", "30-day Binary HF Readmission", "Insurance type", "HF classification", "Hypertension", "Coronary Artery Disease", "Chronic Kidney Disease", 
+            "Charlson Comorbidity Index", 
+            "Systolic blood pressure, mm Hg", "Heart Rate, beats per minute", "Respiratory rate, breaths per minute", 
+            "LOScheck", "Social deprivation index score", "Area deprivation index, national rank", "Area deprivation index, state rank", "Social vulnerability index score")
+
+
+## Vector of categorical variables that need transformation
+catVars <- c("Women", "Insurance type", "HF classification", "Hypertension", "Coronary Artery Disease", "Chronic Kidney Disease")
+
+tab1 <- CreateTableOne(vars = myVars, strata = "Race", data = trans_input_feats, test=TRUE, smd = TRUE)
+
+typeof(tab1["test"])
+
+
+
+# If you just say nonnormal = TRUE, all variables are summarized the “nonnormal” way.
+#print(tab1, formatOptions = list(big.mark = ","))
+# kable(p, format = "latex")
+p <- print(tab1, printToggle = FALSE, noSpaces = TRUE)
+p <- p[,1:4] # Remove "test" column.
+
+kable(p, format = "latex", booktabs = TRUE)
+```
+
+# Table 1: WIHOUT "other" race category.
+```{r}
+## tableone package itself
+library(tableone)
+
+# Make strata column: white, black, other (1,2,3)
+# make using cols:
+
+trans_input_feats <- input_feats[! (input_feats$Race == "other"), ]
+
+
+trans_input_feats <- trans_input_feats <- transform(
+  input_feats, "Race"= ifelse(white==1, "White", ifelse(black==1, "Black", NA)))
+  
+
+# Make insurance column: "privinsurance","Medicare", "Medicaid",
+trans_input_feats <- data_frame <- transform(
+  trans_input_feats, "Insurance_type"= ifelse(privinsurance==1, "Private", ifelse(Medicare==1, "Medicare", ifelse(Medicaid==1, "Medicaid", "Not recorded"))))
+  
+
+# Make HF type: hfsystolic, hfdiastolic, hfother
+trans_input_feats <- data_frame <- transform(
+  trans_input_feats, "HF_classification"= ifelse(hfsystolic==1, "Systolic (HFrEF)", ifelse(hfdiastolic==1, "Diastolic (HFpEF)", ifelse(hfother==1, "Other", "Not recorded"))))
+
+
+
+# vars to summarize (i.e demographics)
+# htn: Hypertension
+# diabetes: ___not available___
+# cad: Coronary Artery Disease
+# ckd: Chronic Kidney Disease
+# sdi: Social deprivation index score
+# ADI_national_rank: 
+# ADI_state_rank: 
+# svi: i.e. RPL_THEMES
+# cci: Charlson Comorbidity Index
+# Systolic_BP: Systolic blood pressure, mm Hg
+# Heart_Rate: Heart Rate, beats per minute
+# Resp: Respiratory rate, breaths per minute
+
+# Rename feats not needing spaces: 
+colnames(trans_input_feats)[colnames(trans_input_feats) == "age_current"] ="Age, years"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "female"] = "Women"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "htn"] = "Hypertension"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "cad"] = "Coronary Artery Disease"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "ckd"] = "Chronic Kidney Disease"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "cci"] = "Charlson Comorbidity Index"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "Systolic_BP"] = "Systolic blood pressure, mm Hg"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "Heart_Rate"] = "Heart Rate, beats per minute"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "Resp"] = "Respiratory rate, breaths per minute"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "sdi"] = "Social deprivation index score"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "ADI_national_rank"] = "Area deprivation index, national rank"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "ADI_state_rank"] = "Area deprivation index, state rank"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "RPL_THEMES"] = "Social vulnerability index score"
+# New feats:
+colnames(trans_input_feats)[colnames(trans_input_feats) == "readmit30bin"] = "30-day Binary HF Readmission"
+
+# Rename feats with spaces: 
+colnames(trans_input_feats)[colnames(trans_input_feats) == "Insurance_type"] = "Insurance type"
+colnames(trans_input_feats)[colnames(trans_input_feats) == "HF_classification"] = "HF classification"
+
+
+
+myVars <- c("Age, years", "Women", "30-day Binary HF Readmission", "Insurance type", "HF classification", "Hypertension", "Coronary Artery Disease", "Chronic Kidney Disease", 
+            "Charlson Comorbidity Index", 
+            "Systolic blood pressure, mm Hg", "Heart Rate, beats per minute", "Respiratory rate, breaths per minute", 
+            "LOScheck", "Social deprivation index score", "Area deprivation index, national rank", "Area deprivation index, state rank", "Social vulnerability index score")
+
+
+## Vector of categorical variables that need transformation
+catVars <- c("Women", "Insurance type", "HF classification", "Hypertension", "Coronary Artery Disease", "Chronic Kidney Disease")
+
+tab1 <- CreateTableOne(vars = myVars, strata = "Race", data = trans_input_feats, test=TRUE, smd = TRUE)
+
+typeof(tab1["test"])
+
+
+
+# If you just say nonnormal = TRUE, all variables are summarized the “nonnormal” way.
+#print(tab1, formatOptions = list(big.mark = ","))
+# kable(p, format = "latex")
+p <- print(tab1, printToggle = FALSE, noSpaces = TRUE)
+p <- p[,1:3] # Remove "test" column.
+
+kable(p, format = "latex", booktabs = TRUE)
+```
+
+
+# Next, do before & after imputation (for an example.)
+
+
+```{r}
+
+all_EHR <- c("All EHR Data (Tabular)", "", "") 
+EHR_1 <- c("", "-", "HF Classification") 
+EHR_2 <- c("", "-", "Comorbidities") # Demo, comorb
+EHR_3 <- c("", "-", "HF Classification+Comorbidities") 
+EHR_4 <- c("", "-", "Charlson Comorbidity Index")
+EHR_5 <- c("", "-", "HF Classification+Charlson Comorbidity Index") 
+
+
+
+all_demo <- c("EHR Demographic Data", "", "")
+demo_1 <- c("", "-", "Age") 
+demo_2 <- c("", "-", "Sex") 
+demo_3 <- c("", "-", "Age+Sex+Insurance Type+Race") 
+
+
+all_SDOHD <- c("SDOHD", "", "") # Demo, comorb
+SDOHD_1 <- c("All SDOHD (total)", "County", "Domains 1-5") # Demo, comorb
+SDOHD_2 <- c("All SDOHD (total)", "Census Tract", "Domains 1-5") # Demo, comorb
+SDOHD_3 <- c("All SDOHD (intersection)", "County", "Domains 1-5 intersection") # Demo, comorb
+SDOHD_4 <- c("All SDOHD (intersection)", "Census Tract", "Domains 1-5 intersection") # Demo, comorb
+
+all_EPA_AQS <- c("EPA AQS", "County", "EPA AQS Total") # Demo, comorb
+
+all_ADI <- c("ADI", "", "") 
+ADI_1 <- c("", "Census Block Group", "ADI National") 
+ADI_2 <- c("", "Census Block Group", "ADI State") 
+
+
+all_SVI <- c("SVI", "Census Tract", "SVI") 
+
+all_SDI <- c("SDI", "Census Tract", "SDI") 
+
+
+# Plot
+data = matrix(c(all_EHR, EHR_1, EHR_2, EHR_3, EHR_4, EHR_5,
+                all_SDOHD, SDOHD_1, SDOHD_2, SDOHD_3, SDOHD_4,
+                all_EPA_AQS,
+                all_ADI, ADI_1, ADI_2,
+                all_SVI, 
+                all_SDI
+                ), ncol=3, byrow=TRUE)
+
+
+```
+
+
+
+
+
+
+```
+
+
+

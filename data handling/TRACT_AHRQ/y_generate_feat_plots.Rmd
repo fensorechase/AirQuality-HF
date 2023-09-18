@@ -1,0 +1,73 @@
+---
+title: "generate_feat_plots"
+output: html_document
+date: "2023-08-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(tidyr)
+#library(tidyverse)
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+#install.packages("kableExtra")
+library(kableExtra)
+library(reshape2)
+
+# Includes AHRQ data. 
+df_clean_baseline_year <- read.csv("./clean_tract_ahrq_AQIimp1_baseline.csv")
+
+nrow(df_clean_baseline_year)
+
+raw_logr_preds <- read.csv("../scripts/__ MODEL RESULTS CSV FILE __") # Model results csv file.
+
+```
+
+Key Questions: 
+# 1.) Plot & look at # of people / county, / census tract 
+# 2. Why are ahrq/SDOH features helping boost black AUC more than white? 
+- Plot: distribution of ahrq_all feats among: a.) black b.) white
+
+
+# Race statistics: figure
+## Columns for use: 
+white <int>
+black <int>
+other <int> ( I assume this is race )
+
+
+# 1.) Plot & look at # of people / county, / census tract 
+```{r}
+# Population by census tract
+pop_by_tract = subset(df_clean_baseline_year, select = c(TRACTFIPS, white, black, other)) 
+pop_by_tract$id <- 1:nrow(pop_by_tract)
+freq_per_tract <- aggregate(pop_by_tract$TRACTFIPS, list(num=pop_by_tract$TRACTFIPS), length)
+
+plt_by_tract <- ggplot(
+    data = by_feat_groups, 
+    aes(x=subgroup, y=max_auc, group=feat, color=feat)) +
+geom_line()+
+geom_jitter(aes(x=subgroup,
+        y = max_auc,
+        color = feat),
+    size=2,
+    show.legend=TRUE,
+    width = 0.1) +
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1))
+
+plt_by_tract # Show plot
+
+
+# Population by county
+pop_by_county = subset(df_clean_baseline_year, select = c(COUNTYFIPS, white, black, other)) 
+pop_by_county$id <- 1:nrow(pop_by_county)
+freq_per_county <- aggregate(pop_by_county$COUNTYFIPS, list(num=pop_by_county$COUNTYFIPS), length)
+
+
+```

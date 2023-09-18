@@ -1,0 +1,24 @@
+{
+    "race":
+    [
+        "white",
+        "black",
+        "other"
+    ],
+    "sex":
+    [
+        "female",
+        "male"
+    ],
+    "combos":
+    [
+        "white_male",
+        "black_male",
+        "other_male",
+        "white_female",
+        "black_female",
+        "other_female"
+    ]
+
+
+}

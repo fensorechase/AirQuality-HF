@@ -1,0 +1,600 @@
+---
+title: "AHRQ Clean Data: for census tract features (NAs, or imputation)"
+output: html_notebook
+---
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+
+
+## Data prep:
+- orig_df: de-id Emory data
+- AHRQ census tract data 2009-2020
+```{r}
+library(caret)
+library(data.table)
+library(dplyr)
+library(sets)
+library(scales)
+library(tidyr)
+library(tidyverse)
+library(stringr)
+library(purrr)
+library(zoo) # Imputation help
+
+
+
+
+# Set wd when not in RStudio
+setwd('/Users/chasefensore/Documents/Emory/Ho Lab/SU23 Rotation/sdoh_summer/aequitus/data')
+
+source('data_cleaners.R')
+
+orig_df <- read.csv("./tractmlm.csv")
+ahrq_df_2009 <- read.csv("./sdoh_2009_tract_1_0.csv")
+ahrq_df_2010 <- read.csv("./sdoh_2010_tract_1_0.csv") # header=FALSE
+ahrq_df_2011 <- read.csv("./sdoh_2011_tract_1_0.csv")
+ahrq_df_2012 <- read.csv("./sdoh_2012_tract_1_0.csv")
+ahrq_df_2013 <- read.csv("./sdoh_2013_tract_1_0.csv")
+ahrq_df_2014 <- read.csv("./sdoh_2014_tract_1_0.csv")
+ahrq_df_2015 <- read.csv("./sdoh_2015_tract_1_0.csv")
+ahrq_df_2016 <- read.csv("./sdoh_2016_tract_1_0.csv")
+ahrq_df_2017 <- read.csv("./sdoh_2017_tract_1_0.csv")
+ahrq_df_2018 <- read.csv("./sdoh_2018_tract_1_0.csv")
+ahrq_df_2019 <- read.csv("./sdoh_2019_tract_1_0.csv")
+ahrq_df_2020 <- read.csv("./sdoh_2020_tract_1_0.csv")
+# ahrq_total <- rbind( c(ahrq_df_2009, ahrq_df_2010, ahrq_df_2011, ahrq_df_2012, ahrq_df_2013, ahrq_df_2014, ahrq_df_2015, ahrq_df_2016, ahrq_df_2017, ahrq_df_2018, ahrq_df_2019, ahrq_df_2020), fill=TRUE)
+
+# Use fill to ensured consistent number of columns, merge dfs from 2009-2020 (via mean).
+# Merge dfs on the 6 items below in list.
+ahrq_total <- rbindlist(list(ahrq_df_2009, ahrq_df_2010, ahrq_df_2011, ahrq_df_2012, ahrq_df_2013,
+                             ahrq_df_2014, ahrq_df_2015, ahrq_df_2016, ahrq_df_2017, ahrq_df_2018,
+                             ahrq_df_2019, ahrq_df_2020), fill=TRUE)
+
+aqi_df_2009 <- read.csv("./annual_aqi_by_county_2009.csv")
+aqi_df_2010 <- read.csv("./annual_aqi_by_county_2010.csv")
+aqi_df_2011 <- read.csv("./annual_aqi_by_county_2011.csv")
+aqi_df_2012 <- read.csv("./annual_aqi_by_county_2012.csv")
+aqi_df_2013 <- read.csv("./annual_aqi_by_county_2013.csv")
+aqi_df_2014 <- read.csv("./annual_aqi_by_county_2014.csv")
+aqi_df_2015 <- read.csv("./annual_aqi_by_county_2015.csv")
+aqi_df_2016 <- read.csv("./annual_aqi_by_county_2016.csv")
+aqi_df_2017 <- read.csv("./annual_aqi_by_county_2017.csv")
+aqi_df_2018 <- read.csv("./annual_aqi_by_county_2018.csv")
+aqi_df_2019 <- read.csv("./annual_aqi_by_county_2019.csv")
+aqi_df_2020 <- read.csv("./annual_aqi_by_county_2020.csv")
+
+aqi_total <- rbindlist(list(aqi_df_2009, aqi_df_2010, aqi_df_2011, aqi_df_2012, aqi_df_2013, 
+                            aqi_df_2014, aqi_df_2015, aqi_df_2016, aqi_df_2017, aqi_df_2018, 
+                            aqi_df_2019, aqi_df_2020), fill=TRUE)
+```
+
+
+# Generate county adjacency file
+
+
+```{r}
+
+vertical_county_adj <- read.csv("county_adjacency.csv", header = TRUE, stringsAsFactors = FALSE)
+head(vertical_county_adj)
+
+horiz_county_adj <-  subset(vertical_county_adj, select = -c(V1,V3))
+names(horiz_county_adj)
+
+# Rename columns
+long_adj <- horiz_county_adj %>% 
+        rename("FIPS_key" = "V2",
+               "neighbors" = "V4")
+long_adj
+
+# Fill NAs in FIPS_key column to get into 'long' format
+df_filled <- long_adj %>%
+  mutate(FIPS_keys_filled = ifelse(!is.na(FIPS_key), FIPS_key, NA)) %>%
+  fill(FIPS_keys_filled, .direction = "down") %>%
+  select(-FIPS_key) %>%
+  rename(FIPS_key = FIPS_keys_filled)
+
+#df_filled
+df <- df_filled
+
+# Turn long --> WIDE format. We want wide format.
+# Convert the dataframe to a named list (dictionary)
+df_dict <- df %>%
+  mutate(neighbors = map(neighbors, as.integer)) %>%
+  group_by(FIPS_key) %>%
+  summarise(neighbors = list(unlist(neighbors))) %>%
+  deframe()
+
+# Iterate through the df_dict and remove entries in the value list that match the key
+for (key in names(df_dict)) {
+  value_list <- df_dict[[key]]
+  value_list <- value_list[!value_list %in% key]
+  df_dict[[key]] <- value_list
+}
+
+# Print the updated dictionary
+print(df_dict)
+
+
+#######
+# Convert dict to dataframe
+#######
+
+df <- df_dict %>%
+  enframe(name = "FIPS_key", value = "neighbors") %>%
+  unnest(neighbors)
+
+# Pivot the dataframe to get separate columns for each neighbor
+FIPS_adj_final <- df %>%
+  group_by(FIPS_key) %>%
+  mutate(neighbor_num = row_number()) %>%
+  pivot_wider(names_from = neighbor_num, values_from = neighbors, names_prefix = "neighbor_") %>%
+  ungroup()
+
+# Print the resulting dataframe
+print(FIPS_adj_final)
+
+write.csv(FIPS_adj_final, file='county_adjacency_clean.csv', row.names = FALSE)
+
+
+
+```
+
+
+#############################################
+Below is AQI processing
+#############################################
+# Convert AQI From long -> wide format (wide has no duplicate FIPS county numbers in 1st column)
+
+
+```{r}
+
+# US Counties and neighbors file from US Census Bureau
+# File link: https://www.census.gov/geographies/reference-files/2010/geo/county-adjacency.html
+# The file layout description is given here:
+# https://www.census.gov/programs-surveys/geography/technical-documentation/records-layout/county-adjacency-record-layout.html
+# Convert tab delimeted txt file to csv file
+
+aqi_remove_cols <- c() # c("State")
+aqi_keep_cols <- names(aqi_total)[! names(aqi_total) %in% aqi_remove_cols]
+# Keep only 'aqi_keep_cols'
+aqi_kept_feats <- aqi_total[, ..aqi_keep_cols]
+aqi_kept_feats
+# Remove all special chars in "County" column
+# aqi_kept_feats$County = str_replace_all(aqi_kept_feats$County, "[^[:alnum:]]", "") # Don't do, '-' will turn into no space, make difficult for crosswalk.
+# Convert to upper: for character matching on merge.
+aqi_kept_feats$County = toupper(aqi_kept_feats$County)
+# Convert State column to abbrevs, not full name.
+aqi_kept_feats$State = state.abb[match(aqi_kept_feats$State, state.name)]
+aqi_kept_feats
+
+```
+
+
+
+# READ COUNTY FIPS list for AQI processing
+
+```{r}
+#############################
+# US Counties and neighbors file from US Census Bureau
+# File link: https://www.census.gov/geographies/reference-files/2010/geo/county-adjacency.html
+# The file layout description is given here:
+# https://www.census.gov/programs-surveys/geography/technical-documentation/records-layout/county-adjacency-record-layout.html
+# Convert tab delimeted txt file to csv file
+
+# Load the required library
+## library(readr)
+# Read the tab-separated file
+## df <- read.table('county_adjacency.txt', sep='\t', header=FALSE)
+# Write the DataFrame to a CSV file
+## write.csv(df, 'county_adjacency.csv', row.names=FALSE)
+# Note county_adjacency CSV Column names:
+# Column Name  || 	Column Description
+# County Name:	2010 State and County Name
+# County GEOID:	2010 State and County FIPS Codes
+# Neighbor Name: 	2010 State and County name of each neighboring county or county equivalent
+# Neighbor GEOID: 2010 State and County FIPS Codes of each neighboring county or county equivalent
+
+# Convert csv file to appropriate neighbor csv format
+# Read the CSV file with data in the first format
+vertical_county_adj <- read.csv("county_adjacency.csv", header = TRUE, stringsAsFactors = FALSE)
+head(vertical_county_adj)
+
+# 1.) Make wide format: (County FIPS <-> county name <-> state abbrev)
+# So keep: V1, V2
+wide_county_fips_to_name <- subset(vertical_county_adj, select = -c(V3,V4))
+head(wide_county_fips_to_name)
+# Split V1 <chr> column on "," and make new state column
+wide_county_fips_to_name[c('County_Name', 'State_Abbrev')] <- str_split_fixed(wide_county_fips_to_name$V1, ',', 2)
+wide_county_fips_to_name <- wide_county_fips_to_name[c('V2', 'County_Name', 'State_Abbrev')] # Set column names
+colnames(wide_county_fips_to_name)[colnames(wide_county_fips_to_name) == "V2"] ="County_FIPS" # Rename V2 to County_FIPS
+# In County_Name col, remove 'county' in all rows.
+wide_county_fips_to_name$County_Name = str_replace_all(wide_county_fips_to_name$County_Name, "County", "")
+# Strip trailing whitespace
+wide_county_fips_to_name$County_Name <- trimws(wide_county_fips_to_name$County_Name, which = c("right"))
+# Strip leading and trailing whitespace
+wide_county_fips_to_name$State_Abbrev <- trimws(wide_county_fips_to_name$State_Abbrev, which = c("both"))
+# Finally, remove all rows with NAs or empty strings.
+wide_county_fips_to_name <- wide_county_fips_to_name %>% drop_na(County_FIPS)
+# Function: Uppercase County_Name column (for matching to AQI county names)
+uppercase_with_special_chars <- function(column) {
+  str_replace_all(column, "[A-Za-z]", toupper)
+}
+# Now, apply uppercase to 'County_Name'
+wide_county_fips_to_name$County_Name = uppercase_with_special_chars(wide_county_fips_to_name$County_Name) 
+# WRITE County FIPS crosswalk csv.
+write.csv(wide_county_fips_to_name, "crosswalk_county_FIPS.csv", row.names=FALSE)
+
+# 2.) Prep for AQI imputation: Insert county FIPS Crosswalk for AQI imputation (County_FIPS): 
+# Add 'wide_county_fips_to_name$County_FIPS' column 'aqi_kept_feats'
+aqi_kept_feats
+wide_county_fips_to_name
+
+###############
+# Georgia only: Check for spatial missingness
+# Get unique Georgia counties with AQI
+ck_counties_1 <- subset(aqi_kept_feats[aqi_kept_feats$State == "GA"], select = c("State", "County"))
+
+############# TODO -- instead of de-dup... we want to make sure ck_total_1 has UNIQUE county+state combos. THEN re-count :)
+
+ck_counties_1 <- ck_counties_1[!duplicated(ck_counties_1$County), ]
+ck_counties_1
+
+# Get all (unique) counties with FIPS numbers (ground truth)
+ck_counties_2 <- wide_county_fips_to_name[is.element(wide_county_fips_to_name$State_Abbrev, c('GA')),]
+ck_counties_2 <- ck_counties_2[!duplicated(ck_counties_2$County_Name), ] # Not necessary, already de-duplicated.
+ck_counties_2
+
+###############
+# All states: Check for spatial missingness in ALL states... 
+ck_total_1<- subset(aqi_kept_feats, select = c("State", "County"))
+ck_total_1 <- ck_total_1 %>% drop_na(State, County)
+############# TODO -- instead of de-dup... we want to make sure ck_total_1 has UNIQUE county+state combos. THEN re-count :)
+ck_total_1 <- ck_total_1[!duplicated(cbind(ck_total_1$County, ck_total_1$State)), ]
+print(nrow(ck_total_1))
+
+ck_total_2 <- wide_county_fips_to_name[!duplicated("County_FIPS"), ] 
+ck_total_2 <- ck_total_2 %>% drop_na(State_Abbrev, County_Name)
+ck_total_2
+
+print(nrow(wide_county_fips_to_name))
+print(nrow(ck_total_2))
+```
+
+# Missing AQI data calculations
+
+# Check: do all counties in 'ck_counties_2,' the full FIPS list, have representation in 'ck_counties_1' ?
+- As we see in Georgia, "GA," no... there are 159 total counties in GA (shown in ck_counties_2)
+... however, ck_counties_1 only has AQI data for 32 of these 159 counties (at some point in time from 2009-2020).
+## RESULT: Spatial missingness for GA: 32 / 159 present (i.e. 20.1% present), 
+## i.e. there is complete temporal missingness for 127 counties in GA (i.e. no AQI data was ever collected for these counties from 2009-2020)
+
+# Check: overall "Spatial Missingness"
+- Note: we will omit those territories without a FIPS number (ex. St. Thomas)
+## RESULT: Spatial missingess for all states: 1144 / 3234 counties present (i.e. 35.37% present), 
+## This means there is complete temporal missingness for 2090 counties in the USA (i.e. no AQI data was ever collected for these counties from 2009-2020)
+
+TODO -- make a figure to show missingness by state? (ex. stacked bar chart, 1 bar for each state)
+
+```{r}
+# First, transform aqi_kept_feats to 'wide' format, showing AQI features from 2009-2020 as columns. Each FIPS is a unique row.
+aqi_kept_feats
+aqi_wide <- aqi_kept_feats %>%
+  pivot_wider(
+    id_cols = c(County, State),
+    names_from = Year,
+    values_from = c(Days.with.AQI, Good.Days, Moderate.Days, 
+                    Unhealthy.for.Sensitive.Groups.Days, Unhealthy.Days, 
+                    Very.Unhealthy.Days, Hazardous.Days, Max.AQI, X90th.Percentile.AQI, 
+                    Median.AQI, Days.CO, Days.NO2, Days.Ozone, Days.PM2.5, Days.PM10),
+    names_sep = "."
+  ) %>%
+  arrange(County)
+
+aqi_wide <- aqi_wide %>% drop_na(State, County)
+
+aqi_wide
+
+# Do right join because wide_county_fips_to_name is ground truth.
+# NOTE: some rows of data are lost from aqi_wide here, but does not impact Georgia.
+# Also Creates new County_FIPS column
+AQI_w_FIPS <- right_join(aqi_wide, wide_county_fips_to_name, by=c("County"="County_Name","State"="State_Abbrev"))
+AQI_w_FIPS <- AQI_w_FIPS %>% select(County_FIPS, everything()) # Move County_FIPS to be first column
+AQI_w_FIPS
+
+write.csv(AQI_w_FIPS, "AQI_by_FIPS_beforeimputation.csv", row.names=FALSE)
+
+
+#######################
+# TODO: why does this show are there only ** 180 ** County_FIPS codes with complete temporal missingness here?
+# Above, we saw 2090 counties with complete temp missingness..
+#sum(colSums(is.na(AQI_w_FIPS[,4:183])) > 0)
+```
+
+
+# AQI Imputation
+impute upon *AQI_w_FIPS*, using county_adj as the guide to know which FIPS are neighbors.
+For all imputation approaches, we aim to reach a full matrix of AQI features for all counties. 
+The full matrix is required in order to have values for each year for each location, as the 'baseline year' feature experiments may require AQI features from a single year in a county, instead of averaging a county AQI features over years 2009-2020.
+
+```{r}
+# Read in the FIPS adjacency file (created above)
+county_adj <- read.csv(file='county_adjacency_clean.csv')
+AQI_w_FIPS <- read.csv(file='AQI_by_FIPS_beforeimputation.csv')
+
+############ 1.1 Simple spatial imputation (leftovers impute by median of column)
+# (1.1) We use mean for spatial imputation because we assume the features have a normal dist among neighbors. 
+# (1.2) We use median for remaining column imputation because it's likely the column values are skewed for a given feature (skewed among all USA counties)
+# Below, we will do spatial imputation. 
+# This means, for a given FIPS (i.e. row): if a missing value exists, 
+imp_1_AQI_by_FIPS <- AQI_w_FIPS 
+
+cols <- setdiff(names(AQI_w_FIPS), c("County_FIPS", "County", "State"))
+failed_imp <- 0 # To count num where neighbors didn't have any vals for that feature to impute.
+# Iterate across columns
+for (i in seq_along(cols)){
+  #prevcol <- cols[i-1]
+  thiscol <- cols[i]
+  curr_year <- sub(".*\\.(\\d+)$", "\\1", thiscol)
+  # This loop goes down the column
+  for(j in seq_along(AQI_w_FIPS[[thiscol]])){
+    cell_val <- AQI_w_FIPS[j, thiscol][1] 
+    if(is.na(cell_val)){
+      #print(cell_val)
+      curr_FIPS <- AQI_w_FIPS[j, "County_FIPS"]
+      #print(curr_FIPS)
+      neighs <- as.list(county_adj[county_adj$FIPS_key == curr_FIPS,])
+      neighs <- unname(neighs) # Removes column names from neighbor list.
+      if(length(neighs) > 0){
+        neighs <- as.list( neighs[2 : length(neighs)] ) # Drop first list elmnt (i.e. the key)
+      }
+      #print(neighs)
+      # Now take mean of neighbor feat vals: for 'thiscol'
+      imp_cell <- AQI_w_FIPS[AQI_w_FIPS$County_FIPS %in% neighs,][thiscol] 
+      imp_cell <- imp_cell[!is.na(imp_cell)]
+      if(length(imp_cell) > 0 ){
+        imp_cell <- mean(imp_cell)
+      }
+      
+
+      # If NA, then imp_cell length is 0.
+      if(length(imp_cell) > 0){
+        imp_1_AQI_by_FIPS[j, thiscol] <- imp_cell
+      }
+      else{
+        failed_imp = failed_imp + 1
+      }
+      #print(imp_cell)
+    }
+  }
+}
+  # result: imp_1_AQI_by_FIPS
+imp_1_AQI_by_FIPS
+sum(is.na(AQI_w_FIPS)) # Num of NAs before imputation: 404,400
+failed_imp # 129780 failed ... out of 180 x 3234 = 528,120
+sum(is.na(imp_1_AQI_by_FIPS)) # NAs left after imp: 129,780.
+
+# 1.2: finish by imputing remaining NAs via median of column.
+# Impute NAs with column medians (ignoring NAs when calculating median)
+
+cols <- setdiff(names(imp_1_AQI_by_FIPS), c("County_FIPS", "County", "State"))
+imputed_dataframe <- imp_1_AQI_by_FIPS
+for (col in names(imputed_dataframe)) {
+  if (is.numeric(imputed_dataframe[[col]])) {
+    median_value <- median(imputed_dataframe[[col]], na.rm = TRUE)
+    imputed_dataframe[[col]][is.na(imputed_dataframe[[col]])] <- median_value
+  }
+}
+sum(is.na(imputed_dataframe)) # No more NAs. 
+write.csv(imputed_dataframe, file="AQI_final_spatial_imp_1.csv", row.names = FALSE )
+
+
+
+############ 2. Spatial imputation (followed by: leftover NAs filled via temporal imputation, for each feature, across a given row)
+imp_2_AQI_by_FIPS # TODO
+
+
+
+```
+
+
+# Note: some values in the merge by 'county name' are not matched up correctly. 
+# This is because county name matching failed some places.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# #########################################
+# OLD (non-baseline year) APPROACH BELOW: Averages feature values from 2009-2020.
+
+# AHRQ temporal feature aggregation:
+
+1. Take mean of all AHRQ feature values over 2009-2020.
+
+(required) Features for geo matching:
+#TRACTFIPS	State-county-census tract FIPS Code (11-digit)
+# future options: 
+- COUNTYFIPS	State-county FIPS Code (5-digit)
+- STATEFIPS	State FIPS Code (2-digit)
+
+
+
+```{r}
+# Aggregate via mean from 2009-2020 based on census tract: "TRACTFIPS"
+# ahrq_result <-  aggregate(ahrq_kept_feats$TRACTFIPS, ahrq_kept_feats, mean)
+ahrq_result <- aggregate(ahrq_kept_feats, by=list(ahrq_kept_feats$TRACTFIPS), FUN=mean, na.rm=TRUE, na.action=NULL)
+nrow(ahrq_result) # 110864
+sum(is.na(ahrq_result$CDCP_ARTHRITIS_ADULT_C)) # Still 38k+ NAs. Why: some censustract had 0 vals from 2009-2020. 
+head(ahrq_result)
+
+```
+# Separately prepare Emory tract_mlm data:
+
+```{r}
+# do some cleaning
+# keep:
+# Patient_Home_Zip_Code
+# "Patient_Home_County"
+# "censustract"
+# "baselineyear": keep for AQI merging (we'll only take AQI from baseline year)
+
+remove_cols <- c("patient_name", "Patient", "Match_Address", "Patient_Address", "Match",
+				 "matchquality", "Lon__Lat", "racecat", "racecat3",
+				 "readmit30count", "LOScheck", "baselinedate", "exitdate",
+				 "datedeath", "followup", "followupyears", "Patient_Birth_Date",
+				"Patient_Home_Street_Address", "Patient_Home_City", "Patient_Home_State",
+				"Patient_Death_Day", "censusblockgroup", "censusblock",
+				"Patient_Expired", "X__Encounters", "Patient_Age__Current_", "dob",
+				"geocodedummy", "blockgroup",
+				"code1", "code2", "code3", "code4", "code5", "code6", "statenum", "countynum",
+				"tractnum", "blocknum", "deceased", "GISjoin", "Geocode", "Factor1", "Factor2",
+				"Factor3", "Factor4", "fips", "X_TYPE_", "X_FREQ_", "Order_Day", "Strength",
+				"lastdate", "totaladmits", "encountergeo", "agecalculated", "CT", "deathany",
+			 	"agegt65", "race_ethnic", "racecatipw", "racecatclean",
+				"hispanicirb", "Financial_Class",
+				"Financial_Class_Type", "Primary_Insurance_Plan", "Race", "Gender", "Ethnic_Group")
+
+orig_df = orig_df[,!(names(orig_df) %in% remove_cols)]
+
+endpoints <- c("readmit30bin", "death30bin", "composite30")
+
+# clean up the end-point related stuff
+for (colx in endpoints) {
+	orig_df <- remove_na(orig_df, colx)
+}
+
+# get the ones with na for open street map
+osm_missing <- which(is.na(orig_df$parknO))
+for (osm_col in c("parknO", "pharmanO", "grocerynO", "restnO", "sportsnO", "healthnO")) {
+	orig_df[osm_missing, osm_col] <- 1/6
+}
+
+# remove adi data
+orig_df <- remove_na(orig_df, "ADI_national_rank")
+orig_df <- create_folds(orig_df, endpoints)
+write.csv(orig_df, file="./clean_tract.csv", row.names=FALSE) # clean_tract
+
+## fix it to be adults aged >= 18
+orig_df <- orig_df[(orig_df$age_current >= 18), ]
+orig_df <- create_folds(orig_df, endpoints)
+write.csv(orig_df, file="./clean_tract_v1.csv", row.names=FALSE)
+
+
+for (colx in c("Systolic_BP", "Heart_Rate", "Resp",
+			   "loceuhfloor", "loceuhicu",
+			   "loceclhfloor", "loceclhicu",
+			   "specialcvd", "specialint",
+			   "specialeme", "specialoth")) {
+	orig_df <- remove_na(orig_df, colx)
+}
+
+# base_missing <- which(is.na(orig_df$location) | is.na(orig_df$Diastolic_BP) |
+# 					  is.na(orig_df$Systolic_BP) | is.na(orig_df$Heart_Rate) |
+# 					  is.na(orig_df$O2_Sat) | is.na(orig_df$Resp))
+
+# orig_df <- orig_df[-base_missing, ]
+
+orig_df <- remove_na(orig_df, "healthnT")
+```
+
+# Merge final AHRQ <-> Emory final data:
+
+
+```{r}
+# - we have mean for each ahrq feature now <-> tractfips.
+colnames(orig_df)[colnames(orig_df) == 'censustract'] <- 'TRACTFIPS' # Rename orig_df column to TRACTFIPS to match.
+
+# Merge the dataframes based on matching values in 'censustract' and 'TRACTFIPS':
+merged_df <- merge(x = orig_df, y = ahrq_result, by.x = 'TRACTFIPS', by.y = 'TRACTFIPS', all.x = TRUE)
+# Note: some rows will have several NAs for AHRQ feats still. 
+
+nrow(merged_df) # 31020
+
+
+
+# merge the 2009-2020 'ahrq_result' df with 'tractmlm'
+# twit_df <- read.csv("twitter_no_input.csv", header=FALSE)
+# topics_no_input <- c("Topic1", "Topic2", "Topic3", "Topic4", "Topic5", "Topic6", "Topic7", "Topic8")
+# colnames(twit_df) <- c("geocode",topics_no_input)
+
+```
+
+# After merging AHRQ <-> Emory final data, then append AQI to each row
+- year vs. CBSA.Code
+- Challenge: some CBSA.Code may not have all years of all column features
+
+```{r}
+
+# 1.) GRU approach
+# TODO: give feats from ALL years to cleantract (how to flatten 2009-2020 years into 1 new feat = 1 year+feat pair)
+# merged_gru_df <- ... do next.
+
+
+# 2.) BASELINE YEAR ONLY: 
+# Then feed into AE
+# Allow missing values. Ideally AE multimodal imputation will work.
+
+# Merge the dataframes based on matching values in 'censustract' and 'TRACTFIPS':
+merged_baseline_df <- merged_df %>% inner_join( aqi_kept_feats, by=c('Patient_Home_County' = 'County', 'baselineyear' = 'Year'))
+# Note: some rows will have *all* NAs for AHRQ feats still (bc no matching county)
+nrow(merged_df) # 31020
+
+head(merged_baseline_df)
+
+```
+
+# OPTION 1:
+## Imputation after merging:
+## ONLY RUN THIS CELL IF IMPUTATION IS DESIRED
+
+- Impute on AHRQ columns. All are numerical features.
+- not including TRACTFIPS column for imputation.
+
+```{r}
+impute_ahrq = names(subset(ahrq_kept_feats, select = -TRACTFIPS))
+length(impute_ahrq)
+
+sum <- 0
+for (k in impute_ahrq) {
+  # First, DROP ahrq col if col has >50% NAs (ie. >50% patients don't have the feat value)
+  if( (sum(is.na(merged_baseline_df[[k]]))/nrow(merged_baseline_df)) >= 0.5 ){
+    # TODO: in future, drop these feats, but for now it causes issues with JSON feat groups.
+    # merged_baseline_df = select(merged_baseline_df, -k ) # Drop feat col if >50% missing.
+    # For now, just replace feat val with 0s for ALL patients (so we pass true)
+    merged_baseline_df[[k]] <- replace(merged_baseline_df[[k]], TRUE, 0) 
+    print(length(merged_baseline_df[[k]]))
+  }
+  merged_baseline_df[[k]][is.na(merged_baseline_df[[k]])] <- median(merged_baseline_df[[k]], na.rm = T)
+  merged_baseline_df[[k]] <- rescale(merged_baseline_df[[k]]) # Rescale 0-1 with scale package
+  sum = sum +1
+}
+
+sum
+
+ncol(merged_baseline_df)
+names(merged_baseline_df)
+
+merged_baseline_df[["OPP_TOP20_NAM_F_HH_25PT"]]
+
+# PRINT *with imputation* TO CSV
+# merged_baseline_df <- create_folds(merged_baseline_df, endpoints)
+# write.csv(merged_baseline_df, file="./clean_tract_v2_ahrq_AQI_allsamps.csv", row.names=FALSE)
+# 
+
+```

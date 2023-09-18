@@ -1,0 +1,1048 @@
+---
+title: "generate_subgroup_statistics"
+output: html_document
+date: "2023-08-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(tidyr)
+#library(tidyverse)
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+#install.packages("kableExtra")
+library(kableExtra)
+library(reshape2)
+# Corr plots
+library(ggcorrplot) 
+library(corrplot)
+library(pBrackets)
+
+
+# Includes AHRQ data. 
+
+df_clean_baseline_year <- read.csv("./__ input features CSV file here __")
+```
+
+# Race statistics: figure
+## Columns for use: 
+white <int>
+black <int>
+other <int> ( I assume this is race )
+
+```{r}
+library(reshape2)
+race_df = subset(df_clean_baseline_year, select = c(white, black, other)) 
+race_df$id <- 1:nrow(race_df)
+
+race_cat <- race_df %>%
+  group_by(id) %>%
+  mutate_each(funs( as.numeric(as.character(.)))) %>%
+  tidyr::gather(race, val, -id) %>%
+  filter(val == 1) %>%
+  select(-val) %>%
+  arrange(id)
+
+# Race ggplot: raw counts
+race_bar_raw <- race_cat %>% 
+  ggplot(aes(x = race)) +
+  geom_bar() +
+  labs(y = "Frequency", x = "Race")
+race_bar_raw
+
+# Race ggplot: proportions
+race_bar_prop <- race_cat %>% 
+  ggplot(aes(x = race, y = after_stat(count)/sum(after_stat(count)))) +
+  geom_bar() +
+  labs(y = "Proportion", x= "Race")
+race_bar_prop
+
+# No nas
+# sum(is.na(race_df))
+```
+
+
+# Sex (or binary gender) statistics: figure
+female <int>
+... male: nrow - number of females
+
+```{r}
+sex_df = subset(df_clean_baseline_year, select = c(female)) 
+sex_df$id <- 1:nrow(sex_df)
+
+sex_df$sex <- with(sex_df, ifelse(female == 0, 'male', 'female'))
+
+# Sex ggplot: raw counts
+sex_bar_raw <- sex_df %>% 
+  ggplot(aes(x = sex)) +
+  geom_bar() +
+  labs(y = "Frequency", x = "Sex")
+sex_bar_raw
+# Sex ggplot: proportions
+sex_bar_prop <- sex_df %>% 
+  ggplot(aes(x = sex, y = after_stat(count)/sum(after_stat(count)))) +
+  geom_bar() +
+  labs(y = "Proportion", x= "Sex")
+sex_bar_prop
+# No nas
+# sum(is.na(sex_df))
+
+# Counts: 
+cat("Number of females: ",  as.character(sum(sex_df$sex == 'female')), "\n")
+cat("Number of males: ",   as.character(sum(sex_df$sex == 'male')), "\n")
+
+# Proportions:
+cat("Number of females: ",  as.character(sum(sex_df$sex == 'female')/nrow(sex_df)), "\n")
+cat("Number of males: ",   as.character(sum(sex_df$sex == 'male')/nrow(sex_df)))
+
+
+
+
+
+
+
+```
+
+# 6 subgroup combinations: 
+## c(white_male, black_male, other_male, white_female, black_female, other_female)
+
+```{r}
+# New column: 'subgroup': c(white_male, black_male, other_male, white_female, black_female, other_female)
+subgroup_df = subset(df_clean_baseline_year, select = c(female, white, black, other)) 
+head(subgroup_df)
+
+subgroup_df$subgroup <- with(subgroup_df, 
+      ifelse(female == 0, 
+        ifelse(white == 1, 'white_male', 
+          ifelse(black == 1, 'black_male', 'other_male' )), 
+            ifelse(white == 1, 'white_female', 
+              ifelse(black == 1, 'black_female', 'other_female')) ))
+
+# Use column 'subgroup' for bar plot:
+
+# Subgroup ggplot: raw county
+subgroup_bar_raw <- subgroup_df %>% 
+  ggplot(aes(x = subgroup)) +
+  geom_bar() +
+  labs(y = "Frequency", x = "Subgroup") + 
+  theme(axis.text.x = element_text(size = 6))
+subgroup_bar_raw
+
+
+# Subgroup ggplot: proportions
+subgroup_bar_prop <- subgroup_df %>% 
+  ggplot(aes(x = subgroup, y = after_stat(count)/sum(after_stat(count)))) +
+  geom_bar() +
+  labs(y = "Proportion", x= "Subgroup") +
+  theme(axis.text.x = element_text(size = 6))
+subgroup_bar_prop
+```
+
+# Medicare or Medicade, or private insurance
+Medicare <int>
+Medicaid <int>
+privinsurance <int>
+
+
+```{r}
+insurace_df = subset(df_clean_baseline_year, select = c(Medicare, Medicaid, privinsurance)) 
+insurace_df$id <- 1:nrow(insurace_df)
+
+ins_cat <- insurace_df %>%
+  group_by(id) %>%
+  mutate_each(funs( as.numeric(as.character(.)))) %>%
+  tidyr::gather(insurance_type, val, -id) %>%
+  filter(val == 1) %>%
+  select(-val) %>%
+  arrange(id)
+
+# Insurance ggplot: raw counts
+ins_bar_raw <- ins_cat %>% 
+  ggplot(aes(x = insurance_type)) +
+  geom_bar() +
+  labs(y = "Frequency", x = "Insurance")
+ins_bar_raw
+
+# Insurance ggplot: proportions
+ins_bar_prop <- ins_cat %>% 
+  ggplot(aes(x = insurance_type, y = after_stat(count)/sum(after_stat(count)))) +
+  geom_bar() +
+  labs(y = "Proportion", x= "Insurance")
+ins_bar_prop
+
+# Assert No nas
+# sum(is.na(insurace_df))
+```
+
+
+```{r}
+#################
+# Combined figure, for proportions
+#################
+
+grid.arrange(race_bar_prop, sex_bar_prop, subgroup_bar_prop, ins_bar_prop,
+             top = "Dataset Demographics", bottom = "", 
+             left = "", right = "",
+             widths = c(6, 4), heights = c(2, 2))
+
+# Create a custom theme to set a common y-axis label
+common_y_label_theme <- theme(axis.title.y = element_text(vjust = 0.5, angle = 0))
+
+
+#################
+# Same figure, for raw counts
+#################
+
+grid.arrange(race_bar_raw, sex_bar_raw, subgroup_bar_raw, ins_bar_raw,
+             top = "Dataset Demographics", bottom = "", 
+             left = "", right = "",
+             widths = c(6, 4), heights = c(2, 2))
+
+# Create a custom theme to set a common y-axis label
+common_y_label_theme <- theme(axis.title.y = element_text(vjust = 0.5, angle = 0))
+```
+
+
+# Entire dataset: age quartiles
+
+```{r}
+age_df = subset(df_clean_baseline_year, select = c(age_current)) 
+age_df$id <- 1:nrow(age_df)
+
+# First (entire dataset), find quartiles of age_current column
+quarts <- quantile(age_df$age_current, probs = c(0,0.25,0.5,0.75,1))
+
+# Also, Exclude patients with 'age_current' > 85
+# sum(age_df$age_current > 105) # TODO: ^^ check on this??
+# Drop row if age_current > 85
+age_df <- age_df[age_df$age_current <= 85,] # from 31020 to 25314 patients.
+
+
+# Second, plot histogram. Change bin size?
+hist(age_df$age_current,
+     xlab = "Age at Admission",
+     main = "Age Frequency Distribution"
+)
+
+# (entire dataset) Third, plot quartiles bins.
+
+
+# Race: Do age within subgroups: 
+# HISTOGRAM FOR AGE by RACE:
+race_age_df = subset(df_clean_baseline_year, select = c(age_current, black, white, other)) 
+race_age_df$id <- 1:nrow(race_age_df)
+race_age_df <- race_age_df[race_age_df$age_current <= 85,]
+race_age_df$race <- with(race_age_df, ifelse(black == 1, "black", ifelse(white == 1, "white", "other")))
+# Then select ONLY c(id, age_current, race)
+race_age_df <- subset(race_age_df, select = c(id, age_current, race)) 
+
+
+# Plot
+# Bins = 30: more smooth.
+ggplot(race_age_df, aes(x = age_current, fill = race, color = race)) + 
+  geom_histogram(alpha = 0.5,
+                 position = "dodge", bins = 10) + 
+  xlab("Age at Admission") + 
+  ylab("Count")
+  ggtitle("Age Frequency Distribution")
+
+##########################
+# Sex: Do age within subgroups: 
+# HISTOGRAM FOR AGE by Sex:
+sex_age_df = subset(df_clean_baseline_year, select = c(age_current, female)) 
+sex_age_df$id <- 1:nrow(sex_age_df)
+sex_age_df <- sex_age_df[sex_age_df$age_current <= 85,]
+sex_age_df$sex <- with(sex_age_df, ifelse(female == 1, "female", "male"))
+# Then select ONLY c(id, age_current, sex)
+sex_age_df <- subset(sex_age_df, select = c(id, age_current, sex)) 
+
+
+# Plot
+# Bins = 30: more smooth.
+ggplot(sex_age_df, aes(x = age_current, fill = sex, color = sex)) + 
+  geom_histogram(alpha = 0.5, bins = 20) + 
+  xlab("Age at Admission") + 
+  ylab("Count")
+  ggtitle("Age Frequency Distribution")
+
+
+  
+  ###########################
+sg_age_df = subset(df_clean_baseline_year, select = c(age_current, female, white, black, other)) 
+sg_age_df$id <- 1:nrow(sg_age_df)
+sg_age_df <- sg_age_df[sg_age_df$age_current <= 85,]
+
+
+sg_age_df$subgroup <- with(sg_age_df, 
+      ifelse(female == 0, 
+        ifelse(white == 1, 'white_male', 
+          ifelse(black == 1, 'black_male', 'other_male' )), 
+            ifelse(white == 1, 'white_female', 
+              ifelse(black == 1, 'black_female', 'other_female')) ))
+
+# Then select ONLY c(id, age_current, race)
+sg_age_df <- subset(sg_age_df, select = c(id, age_current, subgroup)) 
+
+
+# Plot
+# Bins = 30: more smooth.
+ggplot(sg_age_df, aes(x = age_current, fill = subgroup, color = subgroup)) + 
+  geom_histogram(alpha = 0.5,
+                 position = "dodge", bins = 10) + 
+  xlab("Age at Admission") + 
+  ylab("Count")
+  ggtitle("Age Frequency Distribution")
+```
+
+# AGE by quartiles: 
+
+```{r}
+race_age_df = subset(df_clean_baseline_year, select = c(age_current, black, white, other)) 
+race_age_df$id <- 1:nrow(race_age_df)
+race_age_df <- race_age_df[race_age_df$age_current <= 85,]
+race_age_df$race <- with(race_age_df, ifelse(black == 1, "black", ifelse(white == 1, "white", "other")))
+# Then select ONLY c(id, age_current, race)
+race_age_df <- subset(race_age_df, select = c(id, age_current, race)) 
+
+# Stratify by quartiles within each race:
+race_age_df <- race_age_df %>%
+  group_by(race) %>%
+  mutate(q1 = quantile(age_current, 0.25),
+         q2 = quantile(age_current, 0.5),
+         q3 = quantile(age_current, 0.75))
+
+# Create the 'quartile' column based on quartile values
+race_age_df <- race_age_df %>%
+  mutate(quartile = case_when(
+    age_current < q1 ~ 1,
+    age_current >= q1 & age_current < q2 ~ 2,
+    age_current >= q2 & age_current < q3 ~ 3,
+    age_current >= q3 ~ 4,
+    TRUE ~ NA_real_  # Handle cases not covered
+  )) %>%
+  select(-q1, -q2, -q3)  # Remove quartile calculation columns if needed
+
+race_age_df
+
+# Plot
+# Bins = 30: more smooth.
+ggplot(race_age_df, aes(x = age_current, fill = race, color = race)) + 
+  geom_histogram(alpha = 0.5,
+                 position = "dodge", bins = 10) + 
+  xlab("Age at Admission") + 
+  ylab("Count")
+  ggtitle("Age Frequency Distribution")
+  
+
+
+```
+
+
+
+
+
+
+# Readmission rates: 
+- overall
+- by subgroup: 
+
+# READMIT RATES PLOTS (by race):
+```{r}
+
+readmit_by_race <- subset(df_clean_baseline_year, select = c(white, black, other, readmit30bin)) 
+
+white_readmit_rate <- nrow(filter(readmit_by_race, white == 1 & readmit30bin == 1)) / nrow(filter(readmit_by_race, white == 1))
+black_readmit_rate <- nrow(filter(readmit_by_race, black == 1 & readmit30bin == 1)) / nrow(filter(readmit_by_race, black == 1))
+other_readmit_rate <- nrow(filter(readmit_by_race, other == 1 & readmit30bin == 1)) / nrow(filter(readmit_by_race, other == 1))
+
+
+white_readmit_rate
+black_readmit_rate
+other_readmit_rate
+
+# Plot
+data = matrix(c(white_readmit_rate, black_readmit_rate, other_readmit_rate), ncol=3, byrow=TRUE)
+ 
+# specify the column names and row names of matrix
+colnames(data) = c('White','Black','Other')
+
+# assign to table
+LT_table =as.data.table(data)
+
+LT_table %>%
+  kbl(caption="30 Day Readmission Rate by Race",
+       format= "html",
+   col.names = c("White", "Black", "Other"),
+                  align="r",
+                  digits = 3
+   ) %>%
+   kable_classic(full_width = F, html_font = "cambria")
+```
+
+
+# READMIT RATES (by sex): 
+```{r}
+# READMIT RATES (by sex): 
+
+readmit_by_sex <- subset(df_clean_baseline_year, select = c(female, readmit30bin)) 
+
+male_readmit_rate <- nrow(filter(readmit_by_sex, female == 0 & readmit30bin == 1)) / nrow(filter(readmit_by_sex, female == 0))
+female_readmit_rate <- nrow(filter(readmit_by_sex, female == 1 & readmit30bin == 1)) / nrow(filter(readmit_by_sex, female == 1))
+
+male_readmit_rate
+female_readmit_rate
+
+
+# Plot
+data = matrix(c(male_readmit_rate, female_readmit_rate), ncol=2, byrow=TRUE)
+ 
+# specify the column names and row names of matrix
+colnames(data) = c('Male','Female')
+
+# assign to table
+LT_table =as.data.table(data)
+
+# LT_table %>%
+#   kbl(caption="30 Day Readmission Rate by Sex",
+#        format= "html",
+#    col.names = c("Male", "Female"),
+#                   align="r",
+#                   digits = 3
+#    ) %>%
+#    kable_classic(full_width = F, html_font = "cambria")
+
+LT_table %>%
+  kbl(caption="30-d HF Readmission Rate by Sex",
+       format= "latex", 
+   col.names = c("Male", "Female"),
+                  align="r",
+                  digits = 3
+   ) %>%
+   kable_classic(full_width = FALSE, latex_options = "scale_down")
+
+
+
+
+
+```
+
+
+# READMIT RATES: by subgroup (white_male, black_male, other_male, white_female, black_female, other_female)
+```{r}
+#################
+# READMIT RATES: by subgroup (white_male, black_male, other_male, white_female, black_female, other_female)
+subgroup_df = subset(df_clean_baseline_year, select = c(female, white, black, other, readmit30bin)) 
+
+subgroup_df$subgroup <- with(subgroup_df, 
+      ifelse(female == 0, 
+        ifelse(white == 1, 'white_male', 
+          ifelse(black == 1, 'black_male', 'other_male' )), 
+            ifelse(white == 1, 'white_female', 
+              ifelse(black == 1, 'black_female', 'other_female')) ))
+
+readmit_by_sg <- subset(subgroup_df, select = c(subgroup, readmit30bin)) 
+
+whitemale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "white_male" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "white_male"))
+
+whitefemale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "white_female" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "white_female"))
+
+blackmale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "black_male" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "black_male"))
+
+blackfemale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "black_female" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "black_female"))
+
+othermale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "other_male" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "other_male"))
+
+otherfemale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "other_female" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "other_female"))
+
+whitemale_readmit_rate
+blackmale_readmit_rate
+othermale_readmit_rate
+
+
+whitefemale_readmit_rate
+blackfemale_readmit_rate
+otherfemale_readmit_rate
+
+
+# Plot
+data = matrix(c(whitemale_readmit_rate, 
+                blackmale_readmit_rate, 
+                othermale_readmit_rate, 
+                whitefemale_readmit_rate,
+                blackfemale_readmit_rate,
+                otherfemale_readmit_rate
+                ), ncol=6, byrow=TRUE)
+ 
+# specify the column names and row names of matrix
+colnames(data) = c('White Male','Black Male','Other Male', 'White Female', 'Black Female', 'Other Female')
+
+# assign to table
+LT_table =as.data.table(data)
+
+
+LT_table %>%
+  kbl(caption = "30-d HF Readmission Rate by Race and Sex",
+      format = "latex", # Change format to LaTeX
+      col.names = c("White Male", "Black Male", "Other Male", "White Female", "Black Female", "Other Female"),
+      align = "r",
+      digits = 3
+  ) %>%
+  kable_classic(full_width = FALSE, latex_options = "scale_down") # Use latex_options to customize LaTeX output
+```
+
+
+# Total readmission table: 
+
+```{r}
+
+#################
+# READMIT RATES: by subgroup (white_male, black_male, other_male, white_female, black_female, other_female)
+
+####
+readmit_by_race <- subset(df_clean_baseline_year, select = c(white, black, other, readmit30bin)) 
+
+white_readmit_rate <- nrow(filter(readmit_by_race, white == 1 & readmit30bin == 1)) / nrow(filter(readmit_by_race, white == 1))
+black_readmit_rate <- nrow(filter(readmit_by_race, black == 1 & readmit30bin == 1)) / nrow(filter(readmit_by_race, black == 1))
+other_readmit_rate <- nrow(filter(readmit_by_race, other == 1 & readmit30bin == 1)) / nrow(filter(readmit_by_race, other == 1))
+
+
+####
+readmit_by_sex <- subset(df_clean_baseline_year, select = c(female, readmit30bin)) 
+
+male_readmit_rate <- nrow(filter(readmit_by_sex, female == 0 & readmit30bin == 1)) / nrow(filter(readmit_by_sex, female == 0))
+female_readmit_rate <- nrow(filter(readmit_by_sex, female == 1 & readmit30bin == 1)) / nrow(filter(readmit_by_sex, female == 1))
+
+####
+subgroup_df = subset(df_clean_baseline_year, select = c(female, white, black, other, readmit30bin)) 
+
+subgroup_df$subgroup <- with(subgroup_df, 
+      ifelse(female == 0, 
+        ifelse(white == 1, 'white_male', 
+          ifelse(black == 1, 'black_male', 'other_male' )), 
+            ifelse(white == 1, 'white_female', 
+              ifelse(black == 1, 'black_female', 'other_female')) ))
+
+readmit_by_sg <- subset(subgroup_df, select = c(subgroup, readmit30bin)) 
+
+whitemale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "white_male" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "white_male"))
+
+whitefemale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "white_female" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "white_female"))
+
+blackmale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "black_male" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "black_male"))
+
+blackfemale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "black_female" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "black_female"))
+
+othermale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "other_male" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "other_male"))
+
+otherfemale_readmit_rate <- nrow(filter(readmit_by_sg, subgroup == "other_female" & readmit30bin == 1)) / nrow(filter(readmit_by_sg, subgroup == "other_female"))
+
+whitemale_readmit_rate
+blackmale_readmit_rate
+othermale_readmit_rate
+
+
+whitefemale_readmit_rate
+blackfemale_readmit_rate
+otherfemale_readmit_rate
+
+
+# Plot
+data = matrix(c(white_readmit_rate,
+                black_readmit_rate,
+                male_readmit_rate,
+                female_readmit_rate,
+                
+                whitemale_readmit_rate, 
+                blackmale_readmit_rate,
+                whitefemale_readmit_rate,
+                blackfemale_readmit_rate
+                ), ncol=8, byrow=TRUE)
+ 
+# specify the column names and row names of matrix
+colnames(data) = c('White', 'Black', 'Male', 'Female', 'White Male','Black Male', 'White Female', 'Black Female')
+
+# assign to table
+LT_table =as.data.table(data)
+
+LT_table %>%
+  kbl(caption = "30-d HF Readmission Rate by Race and Sex",
+      format = "latex", # Change format to LaTeX
+      col.names = c("White", "Black", "Male", "Female", "White Male", "Black Male", "White Female", "Black Female"),
+      align = "c",
+      digits = 3
+  ) %>%
+  kable_classic(full_width = FALSE, latex_options = "scale_down") # Use latex_options to customize LaTeX output
+
+
+```
+
+# Build Correlation matrix: 
+- See Fig 1A.
+# ggplot2 correlation matrix: http://www.sthda.com/english/wiki/ggplot2-quick-correlation-matrix-heatmap-r-software-and-data-visualization
+
+```{r}
+# X-axis: Basic demogrphic information
+# Black
+# Male
+# Age: 18-55
+# Age: 55-65
+# Age: 65-75
+# Age: 75+
+# Medicaid
+# Medicare
+
+
+
+# Only display MOST correlated features (by abs val) with race = "Black".
+
+
+
+
+
+corr_input_df <- df_clean_baseline_year
+corr_input_df$age_18_55 <- with(df_clean_baseline_year, ifelse((age_current >= 18 & age_current < 55), 1, 0))
+corr_input_df$age_55_65 <- with(df_clean_baseline_year, ifelse((age_current >= 55 & age_current < 65), 1, 0))
+corr_input_df$age_65_75 <- with(df_clean_baseline_year, ifelse((age_current >= 65 & age_current < 75), 1, 0))
+corr_input_df$age_75_up <- with(df_clean_baseline_year, ifelse(age_current >= 75, 1, 0))
+
+
+demo_cols_keep <- c("black",
+                     "male",
+                     "age_18_55",
+                     "age_55_65",
+                     "age_65_75",
+                     "age_75_up",
+                     "Medicaid")
+
+
+# NOTE: We use county & median feature imp here for all correlation measures. 
+### AHRQ SDOHD CATEGORIES
+#   - Median Household Income: Median household income (dollars, inflation-adjusted to data file year)
+#   - % Receiving Food Stamps: Percentage of households that received food stamps/SNAP, past 12 months
+#   - % Commuting via Public Transit: Percentage of workers taking public transportation, excluding taxicab (ages 16 and over)
+#   - % Less than High School Educ: Percentage of population with less than high school education (ages 25 and over)
+#   - % Non-citizens: Percentage of population who are not U.S. citizens
+#   - Distance from Clinic: Median distance in miles to the nearest urgent care, calculated using population weighted tract centroids in the county
+ahrq_cols_keep <- c("county_medianIMP_ACS_MEDIAN_HH_INC", 
+                    "county_medianIMP_ACS_PCT_HH_FOOD_STMP",
+                    "county_medianIMP_ACS_PCT_PUBL_TRANSIT",
+                    "county_medianIMP_ACS_PCT_LT_HS",
+                    "county_medianIMP_ACS_PCT_NON_CITIZEN",
+                    "county_medianIMP_HIFLD_MEDIAN_DIST_UC")
+
+
+
+### ADI categories: 
+
+adi_cols_keep <- c("ADI_national_rank",
+                  "ADI_state_rank")
+
+
+### SVI categories: 
+#Socioeconomic, 
+#Household Composition & Disability, 
+#Minority Status & Language, 
+#Housing Type & Transportation.
+svi_cols_keep <- c("RPL_THEME1",
+                  "RPL_THEME2",
+                  "RPL_THEME3",
+                  "RPL_THEME4")
+
+
+
+### SDI categories: 
+
+sdi_cols_keep <- c("sdi",
+                  "percnt_ltfpl100",
+                  "percnt_singlparntfly",
+                  "percnt_dropout",
+                  "percnt_hhnocar",
+                  "percnt_rentoccup",
+                  "percnt_crowding",
+                  "percnt_nonemp")
+
+
+
+
+# Subset to get only demo_cols_keep, ahrq_cols_keep, and svi_cols_keep
+corr_input_df <- corr_input_df[, c(demo_cols_keep, ahrq_cols_keep, adi_cols_keep, svi_cols_keep, sdi_cols_keep)]
+
+
+# Rename columns:
+RENAME_demo_cols_keep <- c("Black",
+                     "Male",
+                     "Age: 18-55",
+                     "Age: 55-65",
+                     "Age: 65-75",
+                     "Age: 75+",
+                     "Medicaid")
+
+RENAME_ahrq_cols_keep <- c("Median Household Income", 
+                    "% Receiving Food Stamps",
+                    "% Commuting via Public Transit",
+                    "% Less Than High School Educ",
+                    "% Non-citizens",
+                    "Median Distance From Clinic")
+RENAME_adi_cols_keep <- c("ADI: National Rank",
+                  "ADI: State Rank")
+
+
+RENAME_svi_cols_keep <- c("Socioeconomic Status",
+                  "Household Composition & Disability",
+                  "Minority Status & Language",
+                  "Housing Type & Transportation")
+
+RENAME_sdi_cols_keep <- c("SDI",
+                  "% With <100% Federal Poverty Level",
+                  "% Single-parent Households",
+                  "% With Less Than 12 Years Educ",
+                  "% With No Car",
+                  "% Living in Renter-occupied Housing Units",
+                  "% Living in Crowded Housing Units",
+                  "% Non-employed")
+
+
+for(i in 1:length(demo_cols_keep)){
+  colnames(corr_input_df)[colnames(corr_input_df) == demo_cols_keep[i]] = RENAME_demo_cols_keep[i]
+}
+for(i in 1:length(ahrq_cols_keep)){
+  colnames(corr_input_df)[colnames(corr_input_df) == ahrq_cols_keep[i]] = RENAME_ahrq_cols_keep[i]
+}
+for(i in 1:length(adi_cols_keep)){
+  colnames(corr_input_df)[colnames(corr_input_df) == adi_cols_keep[i]] = RENAME_adi_cols_keep[i]
+}
+for(i in 1:length(svi_cols_keep)){
+  colnames(corr_input_df)[colnames(corr_input_df) == svi_cols_keep[i]] = RENAME_svi_cols_keep[i]
+}
+for(i in 1:length(sdi_cols_keep)){
+  colnames(corr_input_df)[colnames(corr_input_df) == sdi_cols_keep[i]] = RENAME_sdi_cols_keep[i]
+}
+
+
+
+# Calculate correlation matrix
+cormat <- round(cor(corr_input_df), 3)
+
+## Now reshape the data  (same as before)
+# Subset columns from 'demo_cols_keep'.
+cormat = cormat[, RENAME_demo_cols_keep]
+
+# Subset rows that are NOT in 'demo_cols_keep'
+cormat = cormat[c(RENAME_ahrq_cols_keep, RENAME_adi_cols_keep, RENAME_svi_cols_keep, RENAME_sdi_cols_keep), ]
+
+
+
+# Save plot as PNG.
+png(file="../figures/sdohs_corr.png", res=500, width=5000, height=5000)
+
+
+# SHOW CORR HEATMAP
+# Color options: https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html
+corrplot(as.matrix(cormat), tl.col = 'black', cl.ratio = 0.3, is.corr=TRUE, tl.srt=45, col = COL2('RdBu', 10)) # Set is.corr TRUE since we're passing in the cor matrix.
+
+mtext(text = c("(5) SDI", "(4) SVI", "(3) ADI"), side = 2, line = -2, at = c(8, 12, 14), las = 1, font = 2)
+mtext(text = c("(1) AHRQ"), side = 2, line = -3, at = c(20), las = 1, font = 2)
+
+
+dev.off()
+
+#ggcorrplot(cormat, hc.order = TRUE, type = "lower", outline.col = "white", 
+#           ggtheme = ggplot2::theme_gray,
+#           colors = c("#6D9EC1", "white", "#E46726"))
+```
+
+
+# Air quality features correlation w/ demo feats: AHRQ AQI
+```{r,fig.width=6, fig.height=4}
+#- AHRQ EPAA (check all 3 imp methods)
+#- EPA AQS (check all 3 imp methods)
+
+# X-axis: Basic demogrphic information
+# Black
+# Male
+# Age: 18-55
+# Age: 55-65
+# Age: 65-75
+# Age: 75+
+# Medicaid
+# Medicare
+
+
+
+# Only display MOST correlated features (by abs val) with race = "Black".
+
+
+
+
+
+corr_input_df <- df_clean_baseline_year
+corr_input_df$age_18_55 <- with(df_clean_baseline_year, ifelse((age_current >= 18 & age_current < 55), 1, 0))
+corr_input_df$age_55_65 <- with(df_clean_baseline_year, ifelse((age_current >= 55 & age_current < 65), 1, 0))
+corr_input_df$age_65_75 <- with(df_clean_baseline_year, ifelse((age_current >= 65 & age_current < 75), 1, 0))
+corr_input_df$age_75_up <- with(df_clean_baseline_year, ifelse(age_current >= 75, 1, 0))
+
+
+demo_cols_keep <- c("black",
+                     "male",
+                     "age_18_55",
+                     "age_55_65",
+                     "age_65_75",
+                     "age_75_up",
+                     "Medicaid")
+
+
+# NOTE: We use county & median feature imp here for all correlation measures. 
+### AHRQ SDOHD CATEGORIES
+#   - Median Household Income: Median household income (dollars, inflation-adjusted to data file year)
+#   - % Receiving Food Stamps: Percentage of households that received food stamps/SNAP, past 12 months
+#   - % Commuting via Public Transit: Percentage of workers taking public transportation, excluding taxicab (ages 16 and over)
+#   - % Less than High School Educ: Percentage of population with less than high school education (ages 25 and over)
+#   - % Non-citizens: Percentage of population who are not U.S. citizens
+#   - Distance from Clinic: Median distance in miles to the nearest urgent care, calculated using population weighted tract centroids in the county
+
+AHRQ_EPAA_median_cols_keep <- c("county_medianIMP_EPAA_2NDMAX_CO_1HR","county_medianIMP_EPAA_2NDMAX_CO_8HR","county_medianIMP_EPAA_98PR_NO2_1HR","county_medianIMP_EPAA_MEAN_NO2_1HR","county_medianIMP_EPAA_2NDMAX_O3_1HR","county_medianIMP_EPAA_4THMAX_O3_8HR","county_medianIMP_EPAA_MAX_PB_3MON","county_medianIMP_EPAA_2NDMAX_PM10_24HR","county_medianIMP_EPAA_MEAN_WTD_PM10","county_medianIMP_EPAA_MEAN_WTD_PM25","county_medianIMP_EPAA_98PR_PM25_DAILY","county_medianIMP_EPAA_99PR_SO2_1HR","county_medianIMP_EPAA_2NDMAX_SO2_24HR","county_medianIMP_EPAA_MEAN_SO2_1HR")
+
+EPA_AQS_median_cols_keep <- c("medianIMP.Days.with.AQI","medianIMP.Good.Days","medianIMP.Moderate.Days","medianIMP.Unhealthy.for.Sensitive.Groups.Days","medianIMP.Unhealthy.Days","medianIMP.Very.Unhealthy.Days","medianIMP.Hazardous.Days","medianIMP.Max.AQI","medianIMP.X90th.Percentile.AQI","medianIMP.Median.AQI","medianIMP.Days.CO","medianIMP.Days.NO2","medianIMP.Days.Ozone","medianIMP.Days.PM2.5","medianIMP.Days.PM10")
+
+
+# Subset to get only demo_cols_keep, ahrq_cols_keep, and svi_cols_keep
+corr_input_df <- corr_input_df[, c(demo_cols_keep, AHRQ_EPAA_median_cols_keep, EPA_AQS_median_cols_keep)]
+
+
+# Rename columns:
+RENAME_demo_cols_keep <- c("Black",
+                     "Male",
+                     "Age: 18-55",
+                     "Age: 55-65",
+                     "Age: 65-75",
+                     "Age: 75+",
+                     "Medicaid")
+
+# county_medianIMP_EPAA_2NDMAX_CO_1HR: 2nd highest 1-hour measurement of Carbon Monoxide (CO) in the year (ppm)
+# county_medianIMP_EPAA_2NDMAX_CO_8HR: 2nd highest non-overlapping 8-hour average of Carbon Monoxide (CO) in the year (ppm)
+# county_medianIMP_EPAA_98PR_NO2_1HR: 98th percentile of the daily max 1-hour measurements of Nitrogen Dioxide (NO2) in the year (ppb)
+# county_medianIMP_EPAA_MEAN_NO2_1HR: Annual mean of all the 1-hour measurements of Nitrogen Dioxide (NO2) in the year (ppb)
+# county_medianIMP_EPAA_2NDMAX_O3_1HR: 2nd highest daily max 1-hour measurement of Ozone (O3) in the year (ppm)
+# county_medianIMP_EPAA_4THMAX_O3_8HR: 4th highest daily max 8-hour average of Ozone (O3) in the year (ppm)
+# county_medianIMP_EPAA_MAX_PB_3MON: Maximum of all rolling 3-month averages of Lead (Pb) in the year (ug/m3)
+# county_medianIMP_EPAA_2NDMAX_PM10_24HR: 2nd highest 24-hour average of PM10 in the year
+# county_medianIMP_EPAA_MEAN_WTD_PM10: Weighted annual mean (mean weighted by calendar quarter) for the year of PM10 (ug/m3)
+# county_medianIMP_EPAA_MEAN_WTD_PM25: Weighted annual mean (mean weighted by calendar quarter) for the year of PM2.5 (ug/m3)
+# county_medianIMP_EPAA_98PR_PM25_DAILY: 98th percentile of the daily average measurements in the year of PM2.5 (ug/m3)
+# county_medianIMP_EPAA_99PR_SO2_1HR: 99th percentile of the daily max 1-hour measurements of Sulfur Dioxide (SO2) in the year
+# county_medianIMP_EPAA_2NDMAX_SO2_24HR: 2nd highest 24-hour average of Sulfur Dioxide (SO2) in the year
+# county_medianIMP_EPAA_MEAN_SO2_1HR: Annual mean of all the 1-hour measurements of Sulfur Dioxide (SO2) in the year (ppb)
+rename_AHRQ_EPAA_median_cols_keep <- c("Year CO 2nd Highest 1-hr (ppm)",
+                                       "Year CO 2nd Highest 8-hr (ppm)",
+                                       "Year p98 NO2 Daily Max 1-hr (ppb)",
+                                       "Year Mean 1-hr NO2 (ppb)",
+                                       "2nd Highest 1-d Max O3",
+                                       "4th Highest 1-d Max O3",
+                                       "Max 3-mo Pb (ug/m3)",
+                                       "2nd Highest 1-d Mean PM10",
+                                       "Year Mean PM10 (ug/m3)",
+                                       "Year Mean PM2.5 (ug/m3)",
+                                       "Year p98 Daily Mean PM2.5 (ug/m3)",
+                                       "Year p99 Daily Mean SO2",
+                                       "Year 2nd Highest 1-d Mean SO2",
+                                       "Year Mean 1-hr SO2 (ppb)")
+
+
+# EPA AQS Variable descriptions here: https://www.epa.gov/outdoor-air-quality-data/about-air-data-reports
+rename_EPA_AQS_median_cols_keep <- c("Days with AQI Measured",
+                                     "Days Good AQI (<50)",
+                                     "Days Moderate AQI (51-100)",
+                                     "Days Unhealthy for Sensitive Groups (101-150)",
+                                     "Days Unhealthy (151-200)",
+                                     "Days Very Unhealthy (201-300)",
+                                     "Days Hazardous (>300)",
+                                     "Year Max Daily AQI",
+                                     "p90 AQI",
+                                     "Median AQI",
+                                     "Days CO was Main Poll.",
+                                     "Days NO2 was Main Poll.",
+                                     "Days Ozone was Main Poll.",
+                                     "Days PM2.5 was Main Poll.",
+                                     "Days PM10 was Main Poll.")
+
+
+
+for(i in 1:length(demo_cols_keep)){
+  colnames(corr_input_df)[colnames(corr_input_df) == demo_cols_keep[i]] = RENAME_demo_cols_keep[i]
+}
+for(i in 1:length(AHRQ_EPAA_median_cols_keep)){
+  colnames(corr_input_df)[colnames(corr_input_df) == AHRQ_EPAA_median_cols_keep[i]] = rename_AHRQ_EPAA_median_cols_keep[i]
+}
+for(i in 1:length(EPA_AQS_median_cols_keep)){
+  colnames(corr_input_df)[colnames(corr_input_df) == EPA_AQS_median_cols_keep[i]] = rename_EPA_AQS_median_cols_keep[i]
+}
+
+
+# Calculate correlation matrix
+cormat <- round(cor(corr_input_df), 3)
+
+## Now reshape the data  (same as before)
+# Subset columns from 'demo_cols_keep'.
+cormat = cormat[, RENAME_demo_cols_keep]
+
+# Subset rows that are NOT in 'demo_cols_keep'
+cormat = cormat[c(rename_AHRQ_EPAA_median_cols_keep, rename_EPA_AQS_median_cols_keep), ]
+
+# devtools::install_github("laresbernardo/lares")
+# library(lares)
+# 
+# corr_cross(corr_input_df, # name of dataset
+#   max_pvalue = 0.05, # display only significant correlations (at 5% level)
+#   top = 10 # display top 10 couples of variables (by correlation coefficient)
+# )
+
+# SHOW CORR HEATMAP
+# Color options: https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html
+#pdf(file="../figures/AQ_corr.pdf")
+png(file="../figures/AQ_corr.png", res=500, width=5000, height=5000)
+
+corrplot(as.matrix(cormat), tl.col = 'black', cl.ratio = 0.4, is.corr=TRUE, tl.srt=45,
+         tl.offset = 1, mar = c(2,5,2,2),
+         col = COL2('RdBu', 10), addrect = 1 ) # Set is.corr TRUE since we're passing in the cor matrix.
+
+mtext(text = c("EPA AQS", "SDOHD EPA"), side = 2, line = -2, at = c(14, 29), las = 1, font = 2)
+
+# Specify the coordinates for the starting and ending points of the line
+x_start <- -14  # Adjust this value to your desired x-position
+y_start <- 15.5  # Adjust this value to your desired y-position
+x_end <- -14  # Same x-position as the starting point
+y_end <- 30  # Adjust this value to control the length of the line
+# Blue bracket
+#arrows(x_start, y_start, x_end, y_end, code = 3, angle = 90, length = 0.1, col = "blue")
+# Black bracket
+brackets(x1=x_start, y1=y_end, x2=x_end, y2=y_start, lwd=2, type=4, ticks=c(0, 0.5, 1))
+
+# Specify the coordinates for the starting and ending points of the line
+x_start <- -14  # Adjust this value to your desired x-position
+y_start <- 1.5  # Adjust this value to your desired y-position
+x_end <- -14  # Same x-position as the starting point
+y_end <- 15  # Adjust this value to control the length of the line
+# Blue bracket
+#arrows(x_start, y_start, x_end, y_end, code = 3, angle = 90, length = 0.1, col = "blue")
+# Black bracket
+brackets(x1=x_start, y1=y_end, x2=x_end, y2=y_start, lwd=2, type=4, ticks=c(0, 0.5, 1))
+
+dev.off()
+```
+
+# Dataset statistics (Table 1):
+```{r}
+# Note; we only show dimensions from the geographical levels used
+svi_db <- c("SVI", "2014","Census Tract",  "15") # Years available: 2000, 2010, 2014, 2016, and 2018
+sdi_db <- c("SDI","2015", "Census Tract", "7") # Years available: 2015
+adi_db <- c("ADI", "2015", "Census Block Group", "17") # Years available: 2015, 2019
+
+# Old 9-6 county intersection (2009-2020): 250 distinct features. 
+# # SDOHD Years available: 2009-2020
+# SDOHD:      (old 9-6 run did 2009+2020 intersection) County: d_2020=655, Tract: d_2020= 318 (excludes geo-ids)
+ahrq_db <- c("SDOHD (AHRQ)", "2009-2020", "Census Tract | County | Intersection",  " 517 | 1307 | 485") 
+
+EPA_db <- c("EPA AQS", "2009-2020", "County", "15") # Years available: 1980-2022
+
+
+
+# Plot
+data = matrix(c(ahrq_db, EPA_db, adi_db, svi_db, sdi_db), ncol=4, byrow=TRUE)
+ 
+
+
+# specify the column names and row names of matrix
+colnames(data) = c("SDOH Database", "Data Version/Year", "Geographic Levels Used", "d")
+
+# assign to table
+LT_table =as.data.table(data)
+
+
+LT_table %>%
+  kbl(caption="Characteristics of public datasets merged with patient HF data, where d is the number of distinct features.",
+       format= "latex",  booktabs = T,
+   col.names = c("SDOH Database", "Data Version/Year", "Geographic Levels Used", "d"),
+                  align="c",
+                  digits = 3
+   ) %>%
+   kable_classic(full_width = FALSE, latex_options = "scale_down")
+```
+
+
+# Feature sets plot
+```{r}
+
+
+all_EHR <- c("All EHR Data (Tabular)", "", "") 
+EHR_1 <- c("", "-", "HF Classification") 
+EHR_2 <- c("", "-", "Comorbidities") # Demo, comorb
+EHR_3 <- c("", "-", "HF Classification+Comorbidities") 
+EHR_4 <- c("", "-", "Charlson Comorbidity Index")
+EHR_5 <- c("", "-", "HF Classification+Charlson Comorbidity Index") 
+
+
+
+all_demo <- c("EHR Demographic Data", "", "")
+demo_1 <- c("", "-", "Age") 
+demo_2 <- c("", "-", "Sex") 
+demo_3 <- c("", "-", "Age+Sex+Insurance Type+Race") 
+
+
+all_SDOHD <- c("SDOHD", "", "") # Demo, comorb
+SDOHD_1 <- c("All SDOHD (total)", "County", "Domains 1-5") # Demo, comorb
+SDOHD_2 <- c("All SDOHD (total)", "Census Tract", "Domains 1-5") # Demo, comorb
+SDOHD_3 <- c("All SDOHD (intersection)", "County", "Domains 1-5 intersection") # Demo, comorb
+SDOHD_4 <- c("All SDOHD (intersection)", "Census Tract", "Domains 1-5 intersection") # Demo, comorb
+
+all_EPA_AQS <- c("EPA AQS", "County", "EPA AQS Total") # Demo, comorb
+
+all_ADI <- c("ADI", "", "") 
+ADI_1 <- c("", "Census Block Group", "ADI National") 
+ADI_2 <- c("", "Census Block Group", "ADI State") 
+
+
+all_SVI <- c("SVI", "Census Tract", "SVI") 
+
+all_SDI <- c("SDI", "Census Tract", "SDI") 
+
+
+
+
+
+# Plot
+data = matrix(c(all_EHR, EHR_1, EHR_2, EHR_3, EHR_4, EHR_5,
+                all_SDOHD, SDOHD_1, SDOHD_2, SDOHD_3, SDOHD_4,
+                all_EPA_AQS,
+                all_ADI, ADI_1, ADI_2,
+                all_SVI, 
+                all_SDI
+                ), ncol=3, byrow=TRUE)
+ 
+
+
+# specify the column names and row names of matrix
+colnames(data) = c("EHR Data", "SDOH Geographic Level (Granularity)", "Feature Set")
+
+# assign to table
+LT_table =as.data.table(data)
+
+
+LT_table %>%
+  kbl(caption="Breakdown of feature sets within EHR data and the five public SDOH databases",
+       format= "latex",  booktabs = T,
+   col.names = c("Data Type", "Geographic Level (Granularity)", "Feature Set"),
+                  align="l",
+                  digits = 3
+   ) %>%
+   kable_classic(full_width = FALSE, latex_options = "scale_down")
+
+
+```
+
+
