@@ -47,12 +47,12 @@ The Importance of Incorporating Air Quality for Predicting 30-day Hospital Readm
 AHRQ SDOHD
 ## Running the Code
 1. Download the following public social determinants of health (SDOH) datasets used during preprocessing:
- - [https://www.ahrq.gov/sdoh/data-analytics/sdoh-data.html](AHRQ SDOHD): (Years 2009-2020)
+ - ([https://www.ahrq.gov/sdoh/data-analytics/sdoh-data.html](AHRQ SDOHD)): (Years 2009-2020)
  - [EPA AQS]([[url](https://aqs.epa.gov/aqsweb/airdata/download_files.html)]): (Years 2009-2020)
  - [ADI]([[url](https://www.neighborhoodatlas.medicine.wisc.edu/)]): (Year 2015)
  - [SVI]([url](https://www.atsdr.cdc.gov/placeandhealth/svi/data_documentation_download.html)): (Year 2014)
  - [SDI]([[url](https://www.graham-center.org/maps-data-tools/social-deprivation-index.html)]): (Year 2015)
 3. Data handling (R): With your own patient data including binary 30-day hospital readmission labels, enter the **data handling** directory.
-4. Scripts model building (Python): Given the preprocessed data, run [sgs_evaluate_baselines.py](./scripts model building%20model%20building/sgs_evaluate_baselines.py) to train models. Results will be saved to user-specified MongoDB collection.
-5. Model results summary (Python): Once models have finished running and results are stored in the MongoDB collection, run [sgs_analyze_baseline.py](./scripts model building%20model%20building/sgs_analyze_baseline.py)
+4. Scripts model building (Python): Given the preprocessed data, run **sgs_evaluate_baselines.py** to train models. Results will be saved to user-specified MongoDB collection.
+5. Model results summary (Python): Once models have finished running and results are stored in the MongoDB collection, run **sgs_analyze_baseline.py**.
 
